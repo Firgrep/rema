@@ -6,6 +6,8 @@
   "dictionaryDefinitions": [],
   "dictionaries": [],
   "words": [
+    "crossterm",
+    "ratatui",
     "Rema",
     "serde"
   ],

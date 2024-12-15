@@ -1,4 +1,5 @@
 pub mod gh;
+pub mod transformer;
 pub mod writer;
 
 pub struct Rema {}
@@ -7,8 +8,11 @@ impl Rema {
     pub fn run() {
         match gh::list_releases() {
             Ok(releases) => {
-                writer::write_releases_to_file(&releases, "releases.json")
-                    .expect("Failed to write releases to file");
+                let latest_versions = transformer::get_latest_versions(releases);
+                println!("Latest versions:");
+                for (app_name, version) in &latest_versions {
+                    println!("{}: {}", app_name, version);
+                }
             }
             Err(err) => {
                 eprintln!("Error fetching releases: {}", err);
