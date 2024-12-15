@@ -1,0 +1,14 @@
+{
+  "version": "0.2",
+  "ignorePaths": [
+    "*.toml"
+  ],
+  "dictionaryDefinitions": [],
+  "dictionaries": [],
+  "words": [
+    "Rema",
+    "serde"
+  ],
+  "ignoreWords": [],
+  "import": []
+}
