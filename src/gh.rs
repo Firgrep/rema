@@ -1,8 +1,8 @@
 use std::{error::Error, process::Command};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Release {
     pub name: String,
 

@@ -1,0 +1,20 @@
+[
+  {
+    "name": "optimus-prime@v0.0.1",
+    "tagName": "optimus-prime@v0.0.1",
+    "publishedAt": "2024-12-15T15:44:20Z",
+    "createdAt": "2024-12-15T15:42:00Z",
+    "isDraft": false,
+    "isPrerelease": false,
+    "isLatest": true
+  },
+  {
+    "name": "megatron@v0.0.1",
+    "tagName": "megatron@v0.0.1",
+    "publishedAt": "2024-12-15T15:43:51Z",
+    "createdAt": "2024-12-15T15:42:00Z",
+    "isDraft": false,
+    "isPrerelease": false,
+    "isLatest": false
+  }
+]

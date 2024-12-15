@@ -1,4 +1,5 @@
 pub mod gh;
+pub mod writer;
 
 pub struct Rema {}
 
@@ -6,9 +7,8 @@ impl Rema {
     pub fn run() {
         match gh::list_releases() {
             Ok(releases) => {
-                for release in releases {
-                    println!("{} ({})", release.name, release.tag_name);
-                }
+                writer::write_releases_to_file(&releases, "releases.json")
+                    .expect("Failed to write releases to file");
             }
             Err(err) => {
                 eprintln!("Error fetching releases: {}", err);
