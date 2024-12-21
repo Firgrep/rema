@@ -2,7 +2,7 @@ use std::{error::Error, process::Command};
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Release {
     pub name: String,
 
@@ -23,6 +23,20 @@ pub struct Release {
 
     #[serde(rename = "isLatest")]
     pub is_latest: bool,
+}
+
+impl Default for Release {
+    fn default() -> Self {
+        Release {
+            name: String::new(),
+            tag_name: String::new(),
+            published_at: String::new(),
+            created_at: String::new(),
+            is_draft: false,
+            is_prerelease: false,
+            is_latest: false,
+        }
+    }
 }
 
 pub fn list_releases() -> Result<Vec<Release>, Box<dyn Error>> {
