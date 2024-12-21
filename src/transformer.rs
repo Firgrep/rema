@@ -308,7 +308,7 @@ mod tests {
     }
 
     #[test]
-    fn generate_same_pre_release() {
+    fn generate_exact_same_existing_pre_release() {
         let test_releases = vec![
             Release {
                 tag_name: "tiger@v1.0.0".to_string(),
@@ -349,5 +349,16 @@ mod tests {
         let result =
             std::panic::catch_unwind(|| generate_pre_release(&ctx, &version, base, pre_type));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn generate_same_pre_release_type() {
+        // TODO
+        // should not be able to create a new pre-release of the same type if it already exists on version
+        // e.g.
+        // v1.0.0-rc.3
+        // attempting to make v1.0.0-rc.1 should fail
+
+        // same for other pre-release types. They should not be visible on the CLI
     }
 }

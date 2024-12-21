@@ -1,10 +1,10 @@
 use colorize::AnsiColor;
 
-pub mod cli;
+mod cli;
 mod ctx;
-pub mod gh;
-pub mod transformer;
-pub mod writer;
+mod gh;
+mod transformer;
+mod writer;
 
 pub struct Rema {}
 
