@@ -1,27 +1,56 @@
 use semver::{BuildMetadata, Prerelease, Version};
 
 use crate::{ctx::AppContext, gh::Release};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-pub fn extract_unique_app_names(releases: Vec<Release>) -> HashSet<String> {
-    let mut app_names = HashSet::new();
+#[derive(Debug, Clone)]
+pub enum PreReleaseType {
+    Alpha,
+    Beta,
+    Rc,
+}
 
-    for release in releases {
-        if let Some((app_name, _)) = release.tag_name.split_once('@') {
-            app_names.insert(app_name.to_string());
-        }
-    }
+#[derive(Debug, Clone)]
+pub enum PreReleaseVersionBump {
+    Major,
+    Minor,
+    Patch,
+    Retain,
+}
 
-    app_names
+#[derive(Debug, Clone)]
+pub enum VersionBump {
+    Major,
+    Minor,
+    Patch,
+    Pre,
+    PreNew(PreReleaseType, PreReleaseVersionBump),
 }
 
 pub fn extract_pkgs_and_all_versions(releases: Vec<Release>) -> HashMap<String, Vec<Version>> {
     let mut all_versions: HashMap<String, Vec<Version>> = HashMap::new();
 
     for release in releases {
+        // For monorepos with multiple packages
         if let Some((app_name, version_str)) = release.tag_name.split_once('@') {
             // Remove the 'v' prefix if present
             let version_str = version_str.strip_prefix('v').unwrap_or(version_str);
+
+            if let Ok(version) = Version::parse(version_str) {
+                if let Some(versions) = all_versions.get_mut(app_name) {
+                    versions.push(version);
+                } else {
+                    all_versions.insert(app_name.to_string(), vec![version]);
+                }
+            } else {
+                panic!("Invalid version format for tag: {}", release.tag_name);
+            }
+        } else {
+            let app_name = "_default";
+            let version_str = release
+                .tag_name
+                .strip_prefix('v')
+                .unwrap_or(release.tag_name.as_str());
 
             if let Ok(version) = Version::parse(version_str) {
                 if let Some(versions) = all_versions.get_mut(app_name) {
@@ -65,27 +94,6 @@ pub fn extract_pkgs_and_latest_versions(releases: Vec<Release>) -> HashMap<Strin
     latest_versions
 }
 
-pub enum PreReleaseType {
-    Alpha,
-    Beta,
-    Rc,
-}
-
-pub enum PreReleaseVersionBump {
-    Major,
-    Minor,
-    Patch,
-    Retain,
-}
-
-pub enum VersionBump {
-    Major,
-    Minor,
-    Patch,
-    Pre,
-    PreNew(PreReleaseType, PreReleaseVersionBump),
-}
-
 pub fn bump_version(ctx: &AppContext, version: &Version, bump: VersionBump) -> Version {
     match bump {
         VersionBump::Major => Version {
@@ -122,15 +130,23 @@ pub fn bump_version(ctx: &AppContext, version: &Version, bump: VersionBump) -> V
 
 fn generate_pre_release(
     ctx: &AppContext,
-    version: &Version,
+    existing_version: &Version,
     base: PreReleaseVersionBump,
     pre_type: PreReleaseType,
 ) -> Version {
     let (major, minor, patch) = match base {
-        PreReleaseVersionBump::Major => (version.major + 1, 0, 0),
-        PreReleaseVersionBump::Minor => (version.major, version.minor + 1, 0),
-        PreReleaseVersionBump::Patch => (version.major, version.minor, version.patch + 1),
-        PreReleaseVersionBump::Retain => (version.major, version.minor, version.patch),
+        PreReleaseVersionBump::Major => (existing_version.major + 1, 0, 0),
+        PreReleaseVersionBump::Minor => (existing_version.major, existing_version.minor + 1, 0),
+        PreReleaseVersionBump::Patch => (
+            existing_version.major,
+            existing_version.minor,
+            existing_version.patch + 1,
+        ),
+        PreReleaseVersionBump::Retain => (
+            existing_version.major,
+            existing_version.minor,
+            existing_version.patch,
+        ),
     };
 
     let pre_str = match pre_type {
@@ -153,13 +169,17 @@ fn generate_pre_release(
     };
 
     // Check if the pre-release already exists.
-    if ctx
-        .find_existing_prerelease(pkg_name, &new_version, pre_type)
-        .is_some()
-    {
+    let existing_pre = ctx.find_existing_prerelease(pkg_name, &new_version, pre_type);
+    if existing_pre.is_some() {
+        let existing_pre = existing_pre.unwrap();
         panic!(
-            "Failed to generate. Pre-release already exists for package: {} with version: {}",
-            pkg_name, new_version
+            "Failed to generate pre-release. {} already exists, or is of older version, for {} ({}.{}.{}-{})",
+            new_version,
+            pkg_name,
+            existing_pre.major,
+            existing_pre.minor,
+            existing_pre.patch,
+            existing_pre.pre
         )
     }
 
@@ -184,7 +204,7 @@ mod tests {
 
     #[test]
     fn test_extract_unique_app_names() {
-        let releases = vec![
+        let test_releases = vec![
             Release {
                 tag_name: "tiger@v1.0.0".to_string(),
                 ..Default::default()
@@ -199,10 +219,11 @@ mod tests {
             },
         ];
 
-        let app_names = extract_unique_app_names(releases);
+        let ctx = AppContext::new(test_releases);
+        let app_names = ctx.get_pkgs();
         assert_eq!(app_names.len(), 2);
-        assert!(app_names.contains("tiger"));
-        assert!(app_names.contains("elephant"));
+        assert!(app_names.contains(&"tiger".to_string()));
+        assert!(app_names.contains(&"elephant".to_string()));
     }
 
     #[test]
@@ -308,7 +329,7 @@ mod tests {
     }
 
     #[test]
-    fn generate_exact_same_existing_pre_release() {
+    fn should_panic_when_generating_exact_same_existing_pre_release() {
         let test_releases = vec![
             Release {
                 tag_name: "tiger@v1.0.0".to_string(),
@@ -337,7 +358,7 @@ mod tests {
         ];
 
         let mut ctx = AppContext::new(test_releases);
-        ctx.select_package("elephant".to_string());
+        ctx.set_selected_package("elephant".to_string());
 
         let version = Version::new(1, 0, 0);
         let base = PreReleaseVersionBump::Patch;
@@ -352,13 +373,39 @@ mod tests {
     }
 
     #[test]
-    fn generate_same_pre_release_type() {
-        // TODO
-        // should not be able to create a new pre-release of the same type if it already exists on version
+    fn should_panic_when_same_pre_release_type_if_newer_exist() {
+        // Should not be able to create a new pre-release of the
+        // same type if it already exists on version
         // e.g.
-        // v1.0.0-rc.3
-        // attempting to make v1.0.0-rc.1 should fail
+        // when v1.0.0-rc.3 exists,
+        // attempting to make v1.0.0-rc.1 should fail.
 
         // same for other pre-release types. They should not be visible on the CLI
+        let test_releases = vec![
+            Release {
+                tag_name: "elephant@v1.0.1-rc.3".to_string(),
+                ..Default::default()
+            },
+            Release {
+                tag_name: "tiger@v1.1.0".to_string(),
+                ..Default::default()
+            },
+        ];
+
+        let mut ctx = AppContext::new(test_releases);
+        ctx.set_selected_package("elephant".to_string());
+
+        // Selected version (CLI)
+        let existing_version = Version::new(1, 0, 0);
+        let base = PreReleaseVersionBump::Patch;
+        let pre_type = PreReleaseType::Rc;
+
+        let mut ctrl_version = Version::new(1, 0, 2);
+        ctrl_version.pre = Prerelease::new("rc.1").unwrap();
+
+        let result = std::panic::catch_unwind(|| {
+            generate_pre_release(&ctx, &existing_version, base, pre_type)
+        });
+        assert!(result.is_err());
     }
 }
