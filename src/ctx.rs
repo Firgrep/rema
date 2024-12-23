@@ -4,14 +4,16 @@ use semver::Version;
 
 use crate::{
     gh::{self, Release},
-    transformer::{extract_pkgs_and_all_versions, PreReleaseType, VersionBump},
+    transformer::{self, extract_pkgs_and_all_versions, PreReleaseType, ReleaseInfo, VersionBump},
 };
 
 pub struct AppContext {
     releases: Vec<Release>,
-    all_versions: HashMap<String, Vec<Version>>,
+    all_versions: HashMap<String, Vec<ReleaseInfo>>,
+    latest_versions: HashMap<String, ReleaseInfo>,
     selected_pkg: Option<String>,
     selected_bump: Option<VersionBump>,
+    target_version: Option<Version>,
 }
 
 pub fn create_ctx_with_data() -> AppContext {
@@ -25,11 +27,15 @@ pub fn create_ctx_with_data() -> AppContext {
 impl AppContext {
     pub fn new(releases: Vec<Release>) -> Self {
         let all_versions = extract_pkgs_and_all_versions(releases.clone());
+        let latest_versions = transformer::extract_pkgs_and_latest_versions(releases.clone());
+
         Self {
             releases,
             all_versions,
+            latest_versions,
             selected_pkg: None,
             selected_bump: None,
+            target_version: None,
         }
     }
 
@@ -45,11 +51,15 @@ impl AppContext {
         self.selected_bump = Some(bump);
     }
 
+    pub fn set_target_version(&mut self, version: Version) {
+        self.target_version = Some(version);
+    }
+
     pub fn get_pre_for_version_for_selected_pkg(
         &self,
         pre: &str,
         version: &Version,
-    ) -> Option<&Version> {
+    ) -> Option<&ReleaseInfo> {
         let pkg_name = self.get_selected_package();
 
         if pkg_name.is_none() {
@@ -60,11 +70,11 @@ impl AppContext {
             .get(pkg_name.unwrap())
             .unwrap()
             .iter()
-            .find(|v| {
-                v.major == version.major
-                    && v.minor == version.minor
-                    && v.patch == version.patch
-                    && v.pre.as_str().contains(pre)
+            .find(|rel| {
+                rel.version.major == version.major
+                    && rel.version.minor == version.minor
+                    && rel.version.patch == version.patch
+                    && rel.version.pre.as_str().contains(pre)
             })
     }
 
@@ -80,23 +90,27 @@ impl AppContext {
         &self.releases
     }
 
+    pub fn get_latest_versions(&self) -> &HashMap<String, ReleaseInfo> {
+        &self.latest_versions
+    }
+
     pub fn find_existing_prerelease(
         &self,
         pkg_name: &str,
         base_version: &Version,
         pre_type: PreReleaseType,
-    ) -> Option<&Version> {
+    ) -> Option<&ReleaseInfo> {
         let pre_str = match pre_type {
             PreReleaseType::Alpha => "alpha",
             PreReleaseType::Beta => "beta",
             PreReleaseType::Rc => "rc",
         };
 
-        self.all_versions.get(pkg_name).unwrap().iter().find(|v| {
-            v.major == base_version.major
-                && v.minor == base_version.minor
-                && v.patch == base_version.patch
-                && v.pre.as_str().starts_with(pre_str)
+        self.all_versions.get(pkg_name).unwrap().iter().find(|rel| {
+            rel.version.major == base_version.major
+                && rel.version.minor == base_version.minor
+                && rel.version.patch == base_version.patch
+                && rel.version.pre.as_str().starts_with(pre_str)
         })
     }
 }

@@ -13,34 +13,43 @@ impl Rema {
     pub fn run() {
         Self::requirements_check();
         let mut ctx = ctx::create_ctx_with_data();
-        let releases = ctx.get_releases();
-        let latest_versions = transformer::extract_pkgs_and_latest_versions(releases.clone());
         let pkgs = ctx.get_pkgs();
 
         let selected_pkg = cli::select_pkg_name(pkgs)
             .unwrap_or_else(|e| panic!("Failed to select package {:?}", Some(e)));
+
         ctx.set_selected_package(selected_pkg.clone());
 
-        let selected_pkg_version = latest_versions.get(&selected_pkg).unwrap_or_else(|| {
+        let latest_versions = ctx.get_latest_versions().clone();
+
+        let selected_pkg_release_info = latest_versions.get(&selected_pkg).unwrap_or_else(|| {
             panic!("Failed to get version for package: {}", selected_pkg);
         });
 
         println!(
             "  {} is currently released as version {}",
             selected_pkg.clone().green().underlined(),
-            selected_pkg_version.clone().to_string().yellow()
+            selected_pkg_release_info
+                .version
+                .clone()
+                .to_string()
+                .yellow()
         );
 
-        let selected_bump = cli::select_version_bump(&ctx, selected_pkg_version.clone())
+        let selected_bump = cli::select_version_bump(&ctx)
             .unwrap_or_else(|e| panic!("Failed to select version bump {:?}", Some(e)));
+
         ctx.set_selected_bump(selected_bump.clone());
 
-        let target_version = transformer::bump_version(&ctx, selected_pkg_version, selected_bump);
+        let target_version = transformer::bump_version(&ctx, selected_bump);
+        ctx.set_target_version(target_version.clone());
 
         println!(
             "Bumped version for {} from {} to {}",
-            selected_pkg, selected_pkg_version, target_version
+            selected_pkg, selected_pkg_release_info.version, target_version
         );
+
+        // TODO retrieve the v_prefix where relevant
     }
 
     fn requirements_check() {

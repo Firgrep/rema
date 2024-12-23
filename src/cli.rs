@@ -28,10 +28,13 @@ fn order_pkg_names(pkgs: Vec<String>) -> Vec<String> {
     pkgs
 }
 
-pub fn select_version_bump(
-    ctx: &AppContext,
-    existing_version: Version,
-) -> Result<VersionBump, Box<dyn std::error::Error>> {
+pub fn select_version_bump(ctx: &AppContext) -> Result<VersionBump, Box<dyn std::error::Error>> {
+    let releases = ctx.get_latest_versions();
+    let selected_pkg = ctx.get_selected_package().unwrap();
+    let selected_pkg_release_info = releases.get(selected_pkg).unwrap();
+
+    let existing_version = selected_pkg_release_info.version.clone();
+
     let options = if existing_version.pre.is_empty() {
         vec![MAJOR, MINOR, PATCH, PRE_NEW]
     } else {
