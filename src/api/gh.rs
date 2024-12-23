@@ -42,7 +42,7 @@ impl Default for Release {
     }
 }
 
-pub fn check_gh_cli() -> Result<bool, Box<dyn Error>> {
+pub fn verify_gh_cli_version() -> Result<bool, Box<dyn Error>> {
     let output = Command::new("gh")
         .arg("--version")
         .output()

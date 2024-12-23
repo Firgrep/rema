@@ -3,7 +3,7 @@ use std::{error::Error, process::Command};
 const GIT_MIN_VERSION: &str = "2.43.0";
 const GIT_MAX_VERSION: &str = "3.0.0";
 
-pub fn check_git() -> Result<bool, Box<dyn Error>> {
+pub fn verify_git_version() -> Result<bool, Box<dyn Error>> {
     let output = Command::new("git")
         .arg("--version")
         .output()

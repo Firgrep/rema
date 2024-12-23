@@ -44,7 +44,7 @@ impl Rema {
     }
 
     fn requirements_check() {
-        let gh_cli = gh::check_gh_cli().unwrap_or_else(|e| {
+        let gh_cli = gh::verify_gh_cli_version().unwrap_or_else(|e| {
             panic!("GitHub CLI check failed: {:?}", Some(e).unwrap());
         });
 
@@ -52,7 +52,7 @@ impl Rema {
             panic!("GitHub CLI is not installed");
         }
 
-        let git = git::check_git().unwrap_or_else(|e| {
+        let git = git::verify_git_version().unwrap_or_else(|e| {
             panic!("Git check failed: {:?}", Some(e).unwrap());
         });
 
