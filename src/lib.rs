@@ -1,8 +1,9 @@
+use api::{gh, git};
 use colorize::AnsiColor;
 
+mod api;
 mod cli;
 mod ctx;
-mod gh;
 mod transformer;
 mod writer;
 
@@ -10,6 +11,7 @@ pub struct Rema {}
 
 impl Rema {
     pub fn run() {
+        Self::requirements_check();
         let mut ctx = ctx::create_ctx_with_data();
         let releases = ctx.get_releases();
         let latest_versions = transformer::extract_pkgs_and_latest_versions(releases.clone());
@@ -39,5 +41,27 @@ impl Rema {
             "Bumped version for {} from {} to {}",
             selected_pkg, selected_pkg_version, target_version
         );
+    }
+
+    fn requirements_check() {
+        let gh_cli = gh::check_gh_cli().unwrap_or_else(|e| {
+            panic!("GitHub CLI check failed: {:?}", Some(e).unwrap());
+        });
+
+        if !gh_cli {
+            panic!("GitHub CLI is not installed");
+        }
+
+        let git = git::check_git().unwrap_or_else(|e| {
+            panic!("Git check failed: {:?}", Some(e).unwrap());
+        });
+
+        if !git {
+            panic!("Git is not installed");
+        }
+
+        git::verify_no_outstanding_commits().unwrap_or_else(|e| {
+            panic!("{:?}", Some(e).unwrap());
+        });
     }
 }
