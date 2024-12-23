@@ -14,7 +14,7 @@ pub struct AppContext {
     selected_bump: Option<VersionBump>,
 }
 
-pub fn create_ctx() -> AppContext {
+pub fn create_ctx_with_data() -> AppContext {
     let releases = gh::list_releases().unwrap_or_else(|e| {
         panic!("Failed to list releases {:?}", Some(e));
     });

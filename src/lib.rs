@@ -10,7 +10,7 @@ pub struct Rema {}
 
 impl Rema {
     pub fn run() {
-        let mut ctx = ctx::create_ctx();
+        let mut ctx = ctx::create_ctx_with_data();
         let releases = ctx.get_releases();
         let latest_versions = transformer::extract_pkgs_and_latest_versions(releases.clone());
         let pkgs = ctx.get_pkgs();
