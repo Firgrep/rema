@@ -41,15 +41,15 @@ impl Rema {
 
         ctx.set_selected_bump(selected_bump.clone());
 
-        let target_version = transformer::bump_version(&ctx, selected_bump);
-        ctx.set_target_version(target_version.clone());
+        let target_release_info = transformer::bump_version(&ctx, selected_bump);
+        ctx.set_target_release_info(target_release_info.clone());
 
         println!(
             "Bumped version for {} from {} to {}",
-            selected_pkg, selected_pkg_release_info.version, target_version
+            selected_pkg, selected_pkg_release_info.version, target_release_info.version
         );
 
-        // TODO retrieve the v_prefix where relevant
+        println!("has v prefix: {}", target_release_info.has_v_prefix)
     }
 
     fn requirements_check() {

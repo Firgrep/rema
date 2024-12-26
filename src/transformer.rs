@@ -124,7 +124,7 @@ pub fn extract_pkgs_and_latest_versions(releases: Vec<Release>) -> HashMap<Strin
     latest_versions
 }
 
-pub fn bump_version(ctx: &AppContext, bump: VersionBump) -> Version {
+pub fn bump_version(ctx: &AppContext, bump: VersionBump) -> ReleaseInfo {
     let latest_versions = ctx.get_latest_versions();
     let selected_pkg = ctx.get_selected_package().unwrap_or_else(|| {
         panic!("No package selected");
@@ -135,35 +135,48 @@ pub fn bump_version(ctx: &AppContext, bump: VersionBump) -> Version {
     });
 
     let version = selected_pkg_release_info.version.clone();
+    let has_v_prefix = selected_pkg_release_info.has_v_prefix.clone();
 
     match bump {
-        VersionBump::Major => Version {
-            major: version.major + 1,
-            minor: 0,
-            patch: 0,
-            pre: Prerelease::EMPTY,
-            build: BuildMetadata::EMPTY,
+        VersionBump::Major => ReleaseInfo {
+            version: Version {
+                major: version.major + 1,
+                minor: 0,
+                patch: 0,
+                pre: Prerelease::EMPTY,
+                build: BuildMetadata::EMPTY,
+            },
+            has_v_prefix: has_v_prefix,
         },
-        VersionBump::Minor => Version {
-            major: version.major,
-            minor: version.minor + 1,
-            patch: 0,
-            pre: Prerelease::EMPTY,
-            build: BuildMetadata::EMPTY,
+        VersionBump::Minor => ReleaseInfo {
+            version: Version {
+                major: version.major,
+                minor: version.minor + 1,
+                patch: 0,
+                pre: Prerelease::EMPTY,
+                build: BuildMetadata::EMPTY,
+            },
+            has_v_prefix: has_v_prefix,
         },
-        VersionBump::Patch => Version {
-            major: version.major,
-            minor: version.minor,
-            patch: version.patch + 1,
-            pre: Prerelease::EMPTY,
-            build: BuildMetadata::EMPTY,
+        VersionBump::Patch => ReleaseInfo {
+            version: Version {
+                major: version.major,
+                minor: version.minor,
+                patch: version.patch + 1,
+                pre: Prerelease::EMPTY,
+                build: BuildMetadata::EMPTY,
+            },
+            has_v_prefix: has_v_prefix,
         },
-        VersionBump::Pre => Version {
-            major: version.major,
-            minor: version.minor,
-            patch: version.patch,
-            pre: increment_pre(&version.pre),
-            build: BuildMetadata::EMPTY,
+        VersionBump::Pre => ReleaseInfo {
+            version: Version {
+                major: version.major,
+                minor: version.minor,
+                patch: version.patch,
+                pre: increment_pre(&version.pre),
+                build: BuildMetadata::EMPTY,
+            },
+            has_v_prefix: has_v_prefix,
         },
         VersionBump::PreNew(pre_type, base) => generate_pre_release(ctx, &version, base, pre_type),
     }
@@ -174,7 +187,7 @@ fn generate_pre_release(
     existing_version: &Version,
     base: PreReleaseVersionBump,
     pre_type: PreReleaseType,
-) -> Version {
+) -> ReleaseInfo {
     let (major, minor, patch) = match base {
         PreReleaseVersionBump::Major => (existing_version.major + 1, 0, 0),
         PreReleaseVersionBump::Minor => (existing_version.major, existing_version.minor + 1, 0),
@@ -200,22 +213,30 @@ fn generate_pre_release(
         Some(name) => name,
         None => panic!("No package selected"),
     };
+    let latest_versions = ctx.get_latest_versions();
+    let selected_pkg_release_info = latest_versions.get(pkg_name).unwrap_or_else(|| {
+        panic!("Failed to get version for package: {}", pkg_name);
+    });
+    let has_v_prefix = selected_pkg_release_info.has_v_prefix.clone();
 
-    let new_version = Version {
-        major,
-        minor,
-        patch,
-        pre: Prerelease::new(pre_str).unwrap(),
-        build: BuildMetadata::EMPTY,
+    let new_release_info = ReleaseInfo {
+        version: Version {
+            major,
+            minor,
+            patch,
+            pre: Prerelease::new(pre_str).unwrap(),
+            build: BuildMetadata::EMPTY,
+        },
+        has_v_prefix,
     };
 
     // Check if the pre-release already exists.
-    let existing_pre = ctx.find_existing_prerelease(pkg_name, &new_version, pre_type);
+    let existing_pre = ctx.find_existing_prerelease(pkg_name, &new_release_info.version, pre_type);
     if existing_pre.is_some() {
         let existing_pre = existing_pre.unwrap();
         panic!(
             "Failed to generate pre-release. {} already exists, or is of older version, for {} ({}.{}.{}-{})",
-            new_version,
+            new_release_info.version,
             pkg_name,
             existing_pre.version.major,
             existing_pre.version.minor,
@@ -224,7 +245,7 @@ fn generate_pre_release(
         )
     }
 
-    new_version
+    new_release_info
 }
 
 fn increment_pre(pre: &Prerelease) -> Prerelease {

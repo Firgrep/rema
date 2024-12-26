@@ -13,7 +13,7 @@ pub struct AppContext {
     latest_versions: HashMap<String, ReleaseInfo>,
     selected_pkg: Option<String>,
     selected_bump: Option<VersionBump>,
-    target_version: Option<Version>,
+    target_version: Option<ReleaseInfo>,
 }
 
 pub fn create_ctx_with_data() -> AppContext {
@@ -51,8 +51,8 @@ impl AppContext {
         self.selected_bump = Some(bump);
     }
 
-    pub fn set_target_version(&mut self, version: Version) {
-        self.target_version = Some(version);
+    pub fn set_target_release_info(&mut self, release_info: ReleaseInfo) {
+        self.target_version = Some(release_info);
     }
 
     pub fn get_pre_for_version_for_selected_pkg(
