@@ -4,12 +4,19 @@ use colorize::AnsiColor;
 mod api;
 mod cli;
 mod ctx;
-mod transformer;
-mod writer;
+mod transform;
+mod write;
 
+// TODO
+// TODO - command line arguments
+// TODO - allow selection of which pre to bump if multiple
+
+/// Rema is a tool to help you manage your releases
 pub struct Rema {}
 
+/// Rema is a tool to help you manage your releases
 impl Rema {
+    /// Run the application
     pub fn run() {
         Self::requirements_check();
         let mut ctx = ctx::create_ctx_with_data();
@@ -29,11 +36,7 @@ impl Rema {
         println!(
             "  {} is currently released as version {}",
             selected_pkg.clone().green().underlined(),
-            selected_pkg_release_info
-                .version
-                .clone()
-                .to_string()
-                .yellow()
+            selected_pkg_release_info.version.clone().to_string().cyan()
         );
 
         let selected_bump = cli::select_version_bump(&ctx)
@@ -41,15 +44,28 @@ impl Rema {
 
         ctx.set_selected_bump(selected_bump.clone());
 
-        let target_release_info = transformer::bump_version(&ctx, selected_bump);
+        let target_release_info = transform::bump_version(&ctx, selected_bump);
         ctx.set_target_release_info(target_release_info.clone());
+
+        let initial_release_title = transform::create_release_title(&ctx);
+
+        let target_title =
+            cli::input_release_title(initial_release_title.as_str()).unwrap_or_else(|e| {
+                panic!("Failed to input release title {:?}", Some(e));
+            });
+
+        let target_description = cli::input_release_description(&ctx).unwrap_or_else(|e| {
+            panic!("Failed to input release description {:?}", Some(e));
+        });
 
         println!(
             "Bumped version for {} from {} to {}",
             selected_pkg, selected_pkg_release_info.version, target_release_info.version
         );
 
-        println!("has v prefix: {}", target_release_info.has_v_prefix)
+        println!("has v prefix: {}", target_release_info.has_v_prefix);
+        println!("title: {}", target_title);
+        println!("target_description: {}", target_description)
     }
 
     fn requirements_check() {
@@ -69,8 +85,9 @@ impl Rema {
             panic!("Git is not installed");
         }
 
-        git::verify_no_outstanding_commits().unwrap_or_else(|e| {
-            panic!("{:?}", Some(e).unwrap());
-        });
+        // TODO
+        // git::verify_no_outstanding_commits().unwrap_or_else(|e| {
+        //     panic!("{:?}", Some(e).unwrap());
+        // });
     }
 }

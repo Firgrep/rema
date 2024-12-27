@@ -34,51 +34,53 @@ pub struct ReleaseInfo {
 }
 
 pub fn extract_pkgs_and_all_versions(releases: Vec<Release>) -> HashMap<String, Vec<ReleaseInfo>> {
-    let mut all_versions: HashMap<String, Vec<ReleaseInfo>> = HashMap::new();
+    let mut all_release_info: HashMap<String, Vec<ReleaseInfo>> = HashMap::new();
 
     for release in releases {
         // For monorepos with multiple packages
         if let Some((app_name, version_str)) = release.tag_name.split_once('@') {
             // Remove the 'v' prefix if present
+            let has_started_with_v = version_str.starts_with('v');
             let version_str = version_str.strip_prefix('v').unwrap_or(version_str);
 
             if let Ok(version) = Version::parse(version_str) {
-                if let Some(versions) = all_versions.get_mut(app_name) {
+                if let Some(release_infos) = all_release_info.get_mut(app_name) {
                     let release_info = ReleaseInfo {
                         version,
-                        has_v_prefix: version_str.starts_with('v'),
+                        has_v_prefix: has_started_with_v,
                     };
-                    versions.push(release_info);
+                    release_infos.push(release_info);
                 } else {
                     let release_info = ReleaseInfo {
                         version,
-                        has_v_prefix: version_str.starts_with('v'),
+                        has_v_prefix: has_started_with_v,
                     };
-                    all_versions.insert(app_name.to_string(), vec![release_info]);
+                    all_release_info.insert(app_name.to_string(), vec![release_info]);
                 }
             } else {
                 panic!("Invalid version format for tag: {}", release.tag_name);
             }
         } else {
             let app_name = ""; // TODO: get the app name from the repo name, etc.
+            let has_started_with_v = release.tag_name.starts_with('v');
             let version_str = release
                 .tag_name
                 .strip_prefix('v')
                 .unwrap_or(release.tag_name.as_str());
 
             if let Ok(version) = Version::parse(version_str) {
-                if let Some(versions) = all_versions.get_mut(app_name) {
+                if let Some(versions) = all_release_info.get_mut(app_name) {
                     let release_info = ReleaseInfo {
                         version,
-                        has_v_prefix: version_str.starts_with('v'),
+                        has_v_prefix: has_started_with_v,
                     };
                     versions.push(release_info);
                 } else {
                     let release_info = ReleaseInfo {
                         version,
-                        has_v_prefix: version_str.starts_with('v'),
+                        has_v_prefix: has_started_with_v,
                     };
-                    all_versions.insert(app_name.to_string(), vec![release_info]);
+                    all_release_info.insert(app_name.to_string(), vec![release_info]);
                 }
             } else {
                 panic!("Invalid version format for tag: {}", release.tag_name);
@@ -86,42 +88,61 @@ pub fn extract_pkgs_and_all_versions(releases: Vec<Release>) -> HashMap<String, 
         }
     }
 
-    all_versions
+    all_release_info
 }
 
-pub fn extract_pkgs_and_latest_versions(releases: Vec<Release>) -> HashMap<String, ReleaseInfo> {
+pub fn extract_pkgs_and_latest_versions(
+    all_releases: &HashMap<String, Vec<ReleaseInfo>>,
+) -> HashMap<String, ReleaseInfo> {
     let mut latest_versions: HashMap<String, ReleaseInfo> = HashMap::new();
 
-    for release in releases {
-        if let Some((app_name, version_str)) = release.tag_name.split_once('@') {
-            // Remove the 'v' prefix if present
-            let version_str = version_str.strip_prefix('v').unwrap_or(version_str);
-
-            if let Ok(version) = Version::parse(version_str) {
-                // Check if the current version is newer
-                if let Some(current_rel) = latest_versions.get(app_name) {
-                    if &version > &current_rel.version {
-                        let release_info = ReleaseInfo {
-                            version,
-                            has_v_prefix: version_str.starts_with('v'),
-                        };
-                        latest_versions.insert(app_name.to_string(), release_info);
-                    }
-                } else {
-                    // Insert the first version encountered
+    for (app_name, releases) in all_releases {
+        for release in releases {
+            // Check if the current version is newer
+            if let Some(current_rel) = latest_versions.get(app_name) {
+                if &release.version > &current_rel.version {
                     let release_info = ReleaseInfo {
-                        version,
-                        has_v_prefix: version_str.starts_with('v'),
+                        version: release.version.clone(),
+                        has_v_prefix: release.has_v_prefix.clone(),
                     };
                     latest_versions.insert(app_name.to_string(), release_info);
                 }
             } else {
-                panic!("Invalid version format for tag: {}", release.tag_name);
+                // Insert the first version encountered
+                let release_info = ReleaseInfo {
+                    version: release.version.clone(),
+                    has_v_prefix: release.has_v_prefix.clone(),
+                };
+                latest_versions.insert(app_name.to_string(), release_info);
             }
         }
     }
 
     latest_versions
+}
+
+pub fn create_release_title(ctx: &AppContext) -> String {
+    let release_info = ctx.get_target_release_info().unwrap_or_else(|| {
+        panic!("No target release info found. Run `bump` command first");
+    });
+    let app_name = ctx.get_selected_package().unwrap_or_else(|| {
+        panic!("No package selected");
+    });
+    let version = release_info.version.to_string();
+
+    if app_name.is_empty() {
+        if release_info.has_v_prefix {
+            format!("v{}", version)
+        } else {
+            version
+        }
+    } else {
+        if release_info.has_v_prefix {
+            format!("{}@v{}", app_name, version)
+        } else {
+            format!("{}@{}", app_name, version)
+        }
+    }
 }
 
 pub fn bump_version(ctx: &AppContext, bump: VersionBump) -> ReleaseInfo {
@@ -265,7 +286,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_extract_unique_app_names() {
+    fn attach_v_prefix_to_title() {
+        let r = vec![
+            Release {
+                tag_name: "tiger@v1.0.0".to_string(),
+                ..Default::default()
+            },
+            Release {
+                tag_name: "elephant@1.0.0".to_string(),
+                ..Default::default()
+            },
+        ];
+
+        let r_t = ReleaseInfo {
+            version: Version::new(1, 0, 1),
+            has_v_prefix: true,
+        };
+        let r_e = ReleaseInfo {
+            version: Version::new(1, 0, 1),
+            has_v_prefix: false,
+        };
+
+        let mut ctx = AppContext::new(r);
+
+        ctx.set_selected_package("tiger".to_string());
+        ctx.set_target_release_info(r_t);
+        assert_eq!(create_release_title(&ctx), "tiger@v1.0.1");
+
+        ctx.set_selected_package("elephant".to_string());
+        ctx.set_target_release_info(r_e);
+        assert_eq!(create_release_title(&ctx), "elephant@1.0.1");
+    }
+
+    #[test]
+    fn extract_unique_app_names() {
         let test_releases = vec![
             Release {
                 tag_name: "tiger@v1.0.0".to_string(),
@@ -286,6 +340,34 @@ mod tests {
         assert_eq!(app_names.len(), 2);
         assert!(app_names.contains(&"tiger".to_string()));
         assert!(app_names.contains(&"elephant".to_string()));
+    }
+
+    #[test]
+    fn should_differentiate_v_prefix() {
+        let r = vec![
+            Release {
+                tag_name: "tiger@v1.0.0".to_string(),
+                ..Default::default()
+            },
+            Release {
+                tag_name: "elephant@v1.0.0".to_string(),
+                ..Default::default()
+            },
+            Release {
+                tag_name: "tiger@1.1.0".to_string(),
+                ..Default::default()
+            },
+        ];
+        let ctx = AppContext::new(r);
+
+        let latest_releases = ctx.get_latest_versions();
+        let tiger = latest_releases.get("tiger").unwrap();
+        let elephant = latest_releases.get("elephant").unwrap();
+        println!("{:?}", latest_releases);
+
+        assert_eq!(tiger.has_v_prefix, false);
+        // TODO this should return true, debug!
+        assert_eq!(elephant.has_v_prefix, true);
     }
 
     #[test]
@@ -313,7 +395,7 @@ mod tests {
 
     #[test]
     fn test_extract_pkgs_and_latest_versions() {
-        let releases = vec![
+        let r = vec![
             Release {
                 tag_name: "tiger@v1.0.0".to_string(),
                 ..Default::default()
@@ -332,7 +414,8 @@ mod tests {
             },
         ];
 
-        let latest_versions = extract_pkgs_and_latest_versions(releases);
+        let ctx = AppContext::new(r);
+        let latest_versions = ctx.get_latest_versions();
         assert_eq!(latest_versions.len(), 2);
         assert_eq!(
             latest_versions.get("tiger").unwrap().version,
@@ -346,7 +429,7 @@ mod tests {
 
     #[test]
     fn test_extract_pkgs_and_latest_versions_with_pre_release() {
-        let releases = vec![
+        let r = vec![
             Release {
                 tag_name: "tiger@v1.0.0".to_string(),
                 ..Default::default()
@@ -377,7 +460,8 @@ mod tests {
             },
         ];
 
-        let latest_versions = extract_pkgs_and_latest_versions(releases);
+        let ctx = AppContext::new(r);
+        let latest_versions = ctx.get_latest_versions();
         assert_eq!(latest_versions.len(), 2);
         assert_eq!(
             latest_versions.get("tiger").unwrap().version,

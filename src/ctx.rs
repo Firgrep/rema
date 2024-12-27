@@ -4,16 +4,16 @@ use semver::Version;
 
 use crate::{
     gh::{self, Release},
-    transformer::{self, extract_pkgs_and_all_versions, PreReleaseType, ReleaseInfo, VersionBump},
+    transform::{self, PreReleaseType, ReleaseInfo, VersionBump},
 };
 
 pub struct AppContext {
-    releases: Vec<Release>,
     all_versions: HashMap<String, Vec<ReleaseInfo>>,
     latest_versions: HashMap<String, ReleaseInfo>,
     selected_pkg: Option<String>,
     selected_bump: Option<VersionBump>,
     target_version: Option<ReleaseInfo>,
+    gh_generate_release_notes: bool,
 }
 
 pub fn create_ctx_with_data() -> AppContext {
@@ -26,16 +26,16 @@ pub fn create_ctx_with_data() -> AppContext {
 
 impl AppContext {
     pub fn new(releases: Vec<Release>) -> Self {
-        let all_versions = extract_pkgs_and_all_versions(releases.clone());
-        let latest_versions = transformer::extract_pkgs_and_latest_versions(releases.clone());
+        let all_versions = transform::extract_pkgs_and_all_versions(releases.clone());
+        let latest_versions = transform::extract_pkgs_and_latest_versions(&all_versions);
 
         Self {
-            releases,
             all_versions,
             latest_versions,
             selected_pkg: None,
             selected_bump: None,
             target_version: None,
+            gh_generate_release_notes: true,
         }
     }
 
@@ -53,6 +53,10 @@ impl AppContext {
 
     pub fn set_target_release_info(&mut self, release_info: ReleaseInfo) {
         self.target_version = Some(release_info);
+    }
+
+    pub fn get_gh_generate_release_notes(&self) -> bool {
+        self.gh_generate_release_notes
     }
 
     pub fn get_pre_for_version_for_selected_pkg(
@@ -82,12 +86,12 @@ impl AppContext {
         self.selected_pkg.as_ref()
     }
 
-    pub fn get_pkgs(&self) -> Vec<String> {
-        self.all_versions.keys().cloned().collect()
+    pub fn get_target_release_info(&self) -> Option<&ReleaseInfo> {
+        self.target_version.as_ref()
     }
 
-    pub fn get_releases(&self) -> &Vec<Release> {
-        &self.releases
+    pub fn get_pkgs(&self) -> Vec<String> {
+        self.all_versions.keys().cloned().collect()
     }
 
     pub fn get_latest_versions(&self) -> &HashMap<String, ReleaseInfo> {

@@ -1,9 +1,13 @@
-use inquire::Select;
+use colorize::AnsiColor;
+use inquire::{
+    ui::{Color, RenderConfig, Styled},
+    Editor, Select,
+};
 use semver::Version;
 
 use crate::{
     ctx::AppContext,
-    transformer::{PreReleaseType, PreReleaseVersionBump, VersionBump},
+    transform::{PreReleaseType, PreReleaseVersionBump, VersionBump},
 };
 
 const MAJOR: &str = "major";
@@ -124,6 +128,47 @@ fn select_pre_release_base_version() -> Result<PreReleaseVersionBump, Box<dyn st
         _ => panic!("Invalid base version"),
     };
     Ok(ans)
+}
+
+pub fn input_release_title(initial_title: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let format_title = format!(
+        "Title (currently set to: {}):",
+        initial_title.to_string().yellow()
+    );
+    let title = Editor::new(format_title.as_str())
+        .with_predefined_text(initial_title)
+        .prompt()?;
+    Ok(title)
+}
+
+pub fn input_release_description(ctx: &AppContext) -> Result<String, Box<dyn std::error::Error>> {
+    let gh_msg = if ctx.get_gh_generate_release_notes() {
+        "(gh auto generate will not overwrite title or description)"
+    } else {
+        ""
+    };
+    let desc_msg = format!("Description {}", gh_msg.grey());
+    let description = Editor::new(desc_msg.as_str())
+        .with_formatter(&|submission| {
+            let char_count = submission.chars().count();
+            if char_count == 0 {
+                String::from("<skipped>")
+            } else if char_count <= 20 {
+                submission.into()
+            } else {
+                let mut substr: String = submission.chars().take(17).collect();
+                substr.push_str("...");
+                substr
+            }
+        })
+        .with_render_config(description_render_config())
+        .prompt()?;
+    Ok(description)
+}
+
+fn description_render_config() -> RenderConfig<'static> {
+    RenderConfig::default()
+        .with_canceled_prompt_indicator(Styled::new("<skipped>").with_fg(Color::DarkYellow))
 }
 
 #[cfg(test)]
