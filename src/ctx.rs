@@ -4,12 +4,14 @@ use semver::Version;
 
 use crate::{
     gh::{self, Release},
+    read::LocalPackageFiles,
     transform::{self, PreReleaseType, ReleaseInfo, VersionBump},
 };
 
 pub struct AppContext {
-    all_versions: HashMap<String, Vec<ReleaseInfo>>,
-    latest_versions: HashMap<String, ReleaseInfo>,
+    local_pkg_files: Option<Vec<LocalPackageFiles>>,
+    all_gh_versions: HashMap<String, Vec<ReleaseInfo>>,
+    latest_gh_versions: HashMap<String, ReleaseInfo>,
     selected_pkg: Option<String>,
     selected_bump: Option<VersionBump>,
     target_version: Option<ReleaseInfo>,
@@ -26,12 +28,13 @@ pub fn create_ctx_with_data() -> AppContext {
 
 impl AppContext {
     pub fn new(releases: Vec<Release>) -> Self {
-        let all_versions = transform::extract_pkgs_and_all_versions(releases.clone());
-        let latest_versions = transform::extract_pkgs_and_latest_versions(&all_versions);
+        let all_versions = transform::extract_all_gh_pkgs_and_versions(releases.clone());
+        let latest_versions = transform::extract_latest_gh_pkgs_and_versions(&all_versions);
 
         Self {
-            all_versions,
-            latest_versions,
+            all_gh_versions: all_versions,
+            latest_gh_versions: latest_versions,
+            local_pkg_files: None,
             selected_pkg: None,
             selected_bump: None,
             target_version: None,
@@ -40,11 +43,19 @@ impl AppContext {
     }
 
     pub fn set_selected_package(&mut self, pkg_name: String) {
-        if self.all_versions.contains_key(&pkg_name) {
+        if self.all_gh_versions.contains_key(&pkg_name) {
             self.selected_pkg = Some(pkg_name);
         } else {
             panic!("Package not found: {}", pkg_name);
         }
+    }
+
+    pub fn set_local_pkg_files(&mut self, local_pkg_files: Vec<LocalPackageFiles>) {
+        self.local_pkg_files = Some(local_pkg_files);
+    }
+
+    pub fn get_local_pkg_files(&self) -> Option<&Vec<LocalPackageFiles>> {
+        self.local_pkg_files.as_ref()
     }
 
     pub fn set_selected_bump(&mut self, bump: VersionBump) {
@@ -70,7 +81,7 @@ impl AppContext {
             panic!("No package selected");
         }
 
-        self.all_versions
+        self.all_gh_versions
             .get(pkg_name.unwrap())
             .unwrap()
             .iter()
@@ -91,11 +102,11 @@ impl AppContext {
     }
 
     pub fn get_pkgs(&self) -> Vec<String> {
-        self.all_versions.keys().cloned().collect()
+        self.all_gh_versions.keys().cloned().collect()
     }
 
     pub fn get_latest_versions(&self) -> &HashMap<String, ReleaseInfo> {
-        &self.latest_versions
+        &self.latest_gh_versions
     }
 
     pub fn find_existing_prerelease(
@@ -110,11 +121,15 @@ impl AppContext {
             PreReleaseType::Rc => "rc",
         };
 
-        self.all_versions.get(pkg_name).unwrap().iter().find(|rel| {
-            rel.version.major == base_version.major
-                && rel.version.minor == base_version.minor
-                && rel.version.patch == base_version.patch
-                && rel.version.pre.as_str().starts_with(pre_str)
-        })
+        self.all_gh_versions
+            .get(pkg_name)
+            .unwrap()
+            .iter()
+            .find(|rel| {
+                rel.version.major == base_version.major
+                    && rel.version.minor == base_version.minor
+                    && rel.version.patch == base_version.patch
+                    && rel.version.pre.as_str().starts_with(pre_str)
+            })
     }
 }

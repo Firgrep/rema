@@ -33,7 +33,9 @@ pub struct ReleaseInfo {
     pub has_v_prefix: bool,
 }
 
-pub fn extract_pkgs_and_all_versions(releases: Vec<Release>) -> HashMap<String, Vec<ReleaseInfo>> {
+pub fn extract_all_gh_pkgs_and_versions(
+    releases: Vec<Release>,
+) -> HashMap<String, Vec<ReleaseInfo>> {
     let mut all_release_info: HashMap<String, Vec<ReleaseInfo>> = HashMap::new();
 
     for release in releases {
@@ -91,7 +93,7 @@ pub fn extract_pkgs_and_all_versions(releases: Vec<Release>) -> HashMap<String, 
     all_release_info
 }
 
-pub fn extract_pkgs_and_latest_versions(
+pub fn extract_latest_gh_pkgs_and_versions(
     all_releases: &HashMap<String, Vec<ReleaseInfo>>,
 ) -> HashMap<String, ReleaseInfo> {
     let mut latest_versions: HashMap<String, ReleaseInfo> = HashMap::new();
@@ -387,7 +389,7 @@ mod tests {
             },
         ];
 
-        let all_versions = extract_pkgs_and_all_versions(releases);
+        let all_versions = extract_all_gh_pkgs_and_versions(releases);
         assert_eq!(all_versions.len(), 2);
         assert_eq!(all_versions.get("tiger").unwrap().len(), 2);
         assert_eq!(all_versions.get("elephant").unwrap().len(), 1);

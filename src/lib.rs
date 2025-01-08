@@ -4,10 +4,13 @@ use colorize::AnsiColor;
 mod api;
 mod cli;
 mod ctx;
+mod read;
 mod transform;
 mod write;
 
 // TODO
+// TODO - match local_pkgs to gh_pkgs, and show non-released local packages as part of the menu as (unreleased)
+// TODO - add a check for local package.json and package-lock.json to have matching versions if they both exist for the same app
 // TODO - command line arguments
 // TODO - allow selection of which pre to bump if multiple
 
@@ -20,7 +23,15 @@ impl Rema {
     pub fn run() {
         Self::requirements_check();
         let mut ctx = ctx::create_ctx_with_data();
+        if let Some(pkg_files) = read::find_local_pkg_files() {
+            ctx.set_local_pkg_files(pkg_files);
+        }
         let pkgs = ctx.get_pkgs();
+
+        let local_pkgs = ctx.get_local_pkg_files().unwrap_or_else(|| {
+            panic!("Failed to get local package files");
+        });
+        println!("Local packages: {:#?}", local_pkgs);
 
         let selected_pkg = cli::select_pkg_name(pkgs)
             .unwrap_or_else(|e| panic!("Failed to select package {:?}", Some(e)));
