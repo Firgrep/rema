@@ -15,8 +15,11 @@ pub enum WriteTargetResult {
     },
 }
 
-// TODO
-pub fn write_target_release_to_file(ctx: &AppContext) -> Result<WriteTargetResult, Box<dyn Error>> {
+/// Write the target releases to local package.json and package-lock.json files. If successful,
+/// will return the original contents to restore in case error downstream.
+pub fn write_target_release_to_local_files(
+    ctx: &AppContext,
+) -> Result<WriteTargetResult, Box<dyn Error>> {
     let release_info = ctx.get_target_release_info().unwrap_or_else(|| {
         panic!("No target release info found. Run `bump` command first");
     });
@@ -28,12 +31,15 @@ pub fn write_target_release_to_file(ctx: &AppContext) -> Result<WriteTargetResul
     let mut original_pkg_json_contents = String::new();
     let mut original_pkg_json_lock_contents = String::new();
 
+    let mut original_pkg_json_path = "";
+
     if let Some(path) = local_pkg_files
         .package_json
         .as_ref()
         .and_then(|pkg| pkg.path.as_ref())
     {
         let path_str = path.as_str();
+        original_pkg_json_path = path_str;
         let original_contents = fs::read_to_string(path_str)?;
 
         let mut json: Value = serde_json::from_str(&original_contents)?;
@@ -45,7 +51,7 @@ pub fn write_target_release_to_file(ctx: &AppContext) -> Result<WriteTargetResul
         if let Err(write_error) = fs::write(path_str, &updated_contents) {
             // Restore the original contents if writing fails
             fs::write(path_str, original_contents)?;
-            println!("Error occurred during writing. Attempted to restore original file...");
+            println!("Error during writing to package.json. Attempted to restore original file...");
             return Err(Box::new(write_error));
         }
 
@@ -69,7 +75,11 @@ pub fn write_target_release_to_file(ctx: &AppContext) -> Result<WriteTargetResul
         if let Err(write_error) = fs::write(path_str, &updated_contents) {
             // Restore the original contents if writing fails
             fs::write(path_str, original_contents)?;
-            println!("Error occurred during writing. Attempted to restore original file...");
+            if !original_pkg_json_contents.is_empty() {
+                fs::write(original_pkg_json_path, original_pkg_json_contents)?;
+            }
+
+            println!("Error during writing to package-lock.json. Attempted to restore original file(s)...");
             return Err(Box::new(write_error));
         }
 
