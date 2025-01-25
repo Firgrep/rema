@@ -20,11 +20,11 @@ pub struct PackageLockJson {
 }
 
 /// Struct to hold package.json and package-lock.json
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct LocalPackageFiles {
     pub name: Option<String>,
     pub package_json: Option<PackageJson>,
-    pub package_lock: Option<PackageLockJson>,
+    pub package_lock_json: Option<PackageLockJson>,
 }
 
 pub fn find_local_pkg_files() -> Option<Vec<LocalPackageFiles>> {
@@ -69,7 +69,7 @@ fn scan_for_package_json(dir: &Path, results: &mut Vec<LocalPackageFiles>) {
                     let pkg_files = LocalPackageFiles {
                         name: package_json.name.clone(),
                         package_json: Some(package_json),
-                        package_lock: None,
+                        package_lock_json: None,
                     };
                     results.push(pkg_files);
                 }
@@ -99,11 +99,23 @@ fn scan_for_package_lock_json(dir: &Path, results: &mut Vec<LocalPackageFiles>) 
                 .file_name()
                 .map_or(false, |name| name == "package-lock.json")
             {
-                // Parse package.json
+                // Parse package-lock.json
                 if let Some(package_lock_json) = parse_package_lock_json(&path) {
                     let name = package_lock_json.name.clone();
                     if let Some(pkg_files) = results.iter_mut().find(|x| x.name == name) {
-                        pkg_files.package_lock = Some(package_lock_json);
+                        if pkg_files
+                            .package_json
+                            .as_ref()
+                            .and_then(|pj| pj.version.clone())
+                            == package_lock_json.version
+                        {
+                            pkg_files.package_lock_json = Some(package_lock_json);
+                        } else {
+                            panic!(
+                                "Found package-lock.json with no matching package.json or version. {:?}",
+                                pkg_files.package_json.as_ref().unwrap().path.clone().unwrap_or_default()
+                            )
+                        }
                     }
                 }
             }

@@ -1,6 +1,7 @@
 {
     "name": "megatron",
     "module": "index.ts",
+    "version": "1.2.3",
     "type": "module",
     "peerDependencies": {
         "typescript": "^5.0.0"

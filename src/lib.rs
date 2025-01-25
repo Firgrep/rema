@@ -9,8 +9,12 @@ mod transform;
 mod write;
 
 // TODO
-// TODO - match local_pkgs to gh_pkgs, and show non-released local packages as part of the menu as (unreleased)
-// TODO - add a check for local package.json and package-lock.json to have matching versions if they both exist for the same app
+// TODO - write and release phase
+// ? DONE keep backups of the original files to revert if the process below fails
+// ? DONE write new version to local package.json if they exist
+// commit and push changes, create the new release
+// git pull to sync with remote (get tags)
+// error handle and restore original files if above fails
 // TODO - command line arguments
 // TODO - allow selection of which pre to bump if multiple
 
@@ -24,18 +28,19 @@ impl Rema {
         Self::requirements_check();
         let mut ctx = ctx::create_ctx_with_data();
         if let Some(pkg_files) = read::find_local_pkg_files() {
-            ctx.set_local_pkg_files(pkg_files);
+            ctx.set_and_match_local_pkg_files(pkg_files);
         }
-        let pkgs = ctx.get_pkgs();
+        let pkgs = ctx.get_latest_pkg_names();
 
-        let local_pkgs = ctx.get_local_pkg_files().unwrap_or_else(|| {
-            panic!("Failed to get local package files");
-        });
-        println!("Local packages: {:#?}", local_pkgs);
+        // let local_pkgs = ctx.get_local_pkg_files().unwrap_or_else(|| {
+        //     panic!("Failed to get local package files");
+        // });
+        // println!("Local packages: {:#?}", local_pkgs);
 
         let selected_pkg = cli::select_pkg_name(pkgs)
             .unwrap_or_else(|e| panic!("Failed to select package {:?}", Some(e)));
 
+        let selected_pkg = selected_pkg.replace("(unreleased)", "").trim().to_string();
         ctx.set_selected_package(selected_pkg.clone());
 
         let latest_versions = ctx.get_latest_versions().clone();
@@ -44,9 +49,17 @@ impl Rema {
             panic!("Failed to get version for package: {}", selected_pkg);
         });
 
+        let is_local_only = selected_pkg_release_info.local_only.clone();
+        let release_status_mgs = if is_local_only {
+            "locally set"
+        } else {
+            "released"
+        };
+
         println!(
-            "  {} is currently released as version {}",
+            "  {} is currently {} as version {}",
             selected_pkg.clone().green().underlined(),
+            release_status_mgs,
             selected_pkg_release_info.version.clone().to_string().cyan()
         );
 
@@ -69,6 +82,15 @@ impl Rema {
             panic!("Failed to input release description {:?}", Some(e));
         });
 
+        let is_confirmed = cli::input_confirmation(&ctx).unwrap_or_else(|e| {
+            panic!("Error occurred during confirmation {:?}", Some(e));
+        });
+
+        if !is_confirmed {
+            println!("Aborted");
+            return;
+        }
+
         println!(
             "Bumped version for {} from {} to {}",
             selected_pkg, selected_pkg_release_info.version, target_release_info.version
@@ -76,7 +98,8 @@ impl Rema {
 
         println!("has v prefix: {}", target_release_info.has_v_prefix);
         println!("title: {}", target_title);
-        println!("target_description: {}", target_description)
+        println!("target_description: {}", target_description);
+        println!("local_pkgs: {:#?}", target_release_info.local_pkg_files);
     }
 
     fn requirements_check() {

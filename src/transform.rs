@@ -1,7 +1,7 @@
 use semver::{BuildMetadata, Prerelease, Version};
 
-use crate::{ctx::AppContext, gh::Release};
-use std::collections::HashMap;
+use crate::{ctx::AppContext, gh::Release, read::LocalPackageFiles};
+use std::{collections::HashMap, error::Error};
 
 #[derive(Debug, Clone)]
 pub enum PreReleaseType {
@@ -24,6 +24,7 @@ pub enum VersionBump {
     Minor,
     Patch,
     Pre,
+    RetainIfUnreleased,
     PreNew(PreReleaseType, PreReleaseVersionBump),
 }
 
@@ -31,6 +32,8 @@ pub enum VersionBump {
 pub struct ReleaseInfo {
     pub version: Version,
     pub has_v_prefix: bool,
+    pub local_pkg_files: Option<LocalPackageFiles>,
+    pub local_only: bool,
 }
 
 pub fn extract_all_gh_pkgs_and_versions(
@@ -50,12 +53,16 @@ pub fn extract_all_gh_pkgs_and_versions(
                     let release_info = ReleaseInfo {
                         version,
                         has_v_prefix: has_started_with_v,
+                        local_pkg_files: None,
+                        local_only: false,
                     };
                     release_infos.push(release_info);
                 } else {
                     let release_info = ReleaseInfo {
                         version,
                         has_v_prefix: has_started_with_v,
+                        local_pkg_files: None,
+                        local_only: false,
                     };
                     all_release_info.insert(app_name.to_string(), vec![release_info]);
                 }
@@ -75,12 +82,16 @@ pub fn extract_all_gh_pkgs_and_versions(
                     let release_info = ReleaseInfo {
                         version,
                         has_v_prefix: has_started_with_v,
+                        local_pkg_files: None,
+                        local_only: false,
                     };
                     versions.push(release_info);
                 } else {
                     let release_info = ReleaseInfo {
                         version,
                         has_v_prefix: has_started_with_v,
+                        local_pkg_files: None,
+                        local_only: false,
                     };
                     all_release_info.insert(app_name.to_string(), vec![release_info]);
                 }
@@ -106,6 +117,8 @@ pub fn extract_latest_gh_pkgs_and_versions(
                     let release_info = ReleaseInfo {
                         version: release.version.clone(),
                         has_v_prefix: release.has_v_prefix.clone(),
+                        local_pkg_files: release.local_pkg_files.clone(),
+                        local_only: release.local_only.clone(),
                     };
                     latest_versions.insert(app_name.to_string(), release_info);
                 }
@@ -114,6 +127,8 @@ pub fn extract_latest_gh_pkgs_and_versions(
                 let release_info = ReleaseInfo {
                     version: release.version.clone(),
                     has_v_prefix: release.has_v_prefix.clone(),
+                    local_pkg_files: release.local_pkg_files.clone(),
+                    local_only: release.local_only.clone(),
                 };
                 latest_versions.insert(app_name.to_string(), release_info);
             }
@@ -159,8 +174,22 @@ pub fn bump_version(ctx: &AppContext, bump: VersionBump) -> ReleaseInfo {
 
     let version = selected_pkg_release_info.version.clone();
     let has_v_prefix = selected_pkg_release_info.has_v_prefix.clone();
+    let local_pkg_files = selected_pkg_release_info.local_pkg_files.clone();
+    let local_only = selected_pkg_release_info.local_only.clone();
 
     match bump {
+        VersionBump::RetainIfUnreleased => ReleaseInfo {
+            version: Version {
+                major: version.major,
+                minor: version.minor,
+                patch: version.patch,
+                pre: version.pre.clone(),
+                build: BuildMetadata::EMPTY,
+            },
+            has_v_prefix,
+            local_pkg_files,
+            local_only,
+        },
         VersionBump::Major => ReleaseInfo {
             version: Version {
                 major: version.major + 1,
@@ -169,7 +198,9 @@ pub fn bump_version(ctx: &AppContext, bump: VersionBump) -> ReleaseInfo {
                 pre: Prerelease::EMPTY,
                 build: BuildMetadata::EMPTY,
             },
-            has_v_prefix: has_v_prefix,
+            has_v_prefix,
+            local_pkg_files,
+            local_only,
         },
         VersionBump::Minor => ReleaseInfo {
             version: Version {
@@ -179,7 +210,9 @@ pub fn bump_version(ctx: &AppContext, bump: VersionBump) -> ReleaseInfo {
                 pre: Prerelease::EMPTY,
                 build: BuildMetadata::EMPTY,
             },
-            has_v_prefix: has_v_prefix,
+            has_v_prefix,
+            local_pkg_files,
+            local_only,
         },
         VersionBump::Patch => ReleaseInfo {
             version: Version {
@@ -189,7 +222,9 @@ pub fn bump_version(ctx: &AppContext, bump: VersionBump) -> ReleaseInfo {
                 pre: Prerelease::EMPTY,
                 build: BuildMetadata::EMPTY,
             },
-            has_v_prefix: has_v_prefix,
+            has_v_prefix,
+            local_pkg_files,
+            local_only,
         },
         VersionBump::Pre => ReleaseInfo {
             version: Version {
@@ -199,10 +234,64 @@ pub fn bump_version(ctx: &AppContext, bump: VersionBump) -> ReleaseInfo {
                 pre: increment_pre(&version.pre),
                 build: BuildMetadata::EMPTY,
             },
-            has_v_prefix: has_v_prefix,
+            has_v_prefix,
+            local_pkg_files,
+            local_only,
         },
         VersionBump::PreNew(pre_type, base) => generate_pre_release(ctx, &version, base, pre_type),
     }
+}
+
+pub fn match_local_pkgs_with_gh_pkgs(
+    gh_versions: &mut HashMap<String, ReleaseInfo>,
+    local_pkg_files: &[LocalPackageFiles],
+) -> Result<HashMap<String, ReleaseInfo>, Box<dyn Error>> {
+    // Create a clone of the HashMap to modify and return
+    let mut updated_versions = gh_versions.clone();
+
+    // Keep track of which local packages that have been matched
+    let mut matched_local_pkgs = Vec::new();
+
+    // First, match GitHub versions with local packages
+    for (gh_pkg_name, release_info) in updated_versions.iter_mut() {
+        if let Some(matching_pkg) = local_pkg_files.iter().find(|local_pkg| {
+            local_pkg
+                .name
+                .as_ref()
+                .map_or(false, |name| name == gh_pkg_name)
+        }) {
+            release_info.local_pkg_files = Some(matching_pkg.clone());
+            matched_local_pkgs.push(matching_pkg.name.clone().unwrap_or_default());
+        }
+    }
+
+    // Now handle unmatched local packages
+    for local_pkg in local_pkg_files {
+        // Skip already matched this package
+        if let Some(pkg_name) = &local_pkg.name {
+            if matched_local_pkgs.contains(pkg_name) {
+                continue;
+            }
+
+            let existing_version = local_pkg
+                .package_json
+                .as_ref()
+                .and_then(|pkg| pkg.version.as_ref())
+                .map_or(Version::new(0, 0, 0), |v| Version::parse(v).unwrap());
+
+            // Create a new ReleaseInfo for unmatched local package
+            let local_only_release = ReleaseInfo {
+                version: existing_version,
+                has_v_prefix: false,
+                local_pkg_files: Some(local_pkg.clone()),
+                local_only: true,
+            };
+
+            updated_versions.insert(pkg_name.clone(), local_only_release);
+        }
+    }
+
+    Ok(updated_versions)
 }
 
 fn generate_pre_release(
@@ -241,6 +330,8 @@ fn generate_pre_release(
         panic!("Failed to get version for package: {}", pkg_name);
     });
     let has_v_prefix = selected_pkg_release_info.has_v_prefix.clone();
+    let local_pkg_files = selected_pkg_release_info.local_pkg_files.clone();
+    let local_only = selected_pkg_release_info.local_only.clone();
 
     let new_release_info = ReleaseInfo {
         version: Version {
@@ -251,6 +342,8 @@ fn generate_pre_release(
             build: BuildMetadata::EMPTY,
         },
         has_v_prefix,
+        local_pkg_files,
+        local_only,
     };
 
     // Check if the pre-release already exists.
@@ -303,10 +396,14 @@ mod tests {
         let r_t = ReleaseInfo {
             version: Version::new(1, 0, 1),
             has_v_prefix: true,
+            local_pkg_files: None,
+            local_only: false,
         };
         let r_e = ReleaseInfo {
             version: Version::new(1, 0, 1),
             has_v_prefix: false,
+            local_pkg_files: None,
+            local_only: false,
         };
 
         let mut ctx = AppContext::new(r);
@@ -338,7 +435,7 @@ mod tests {
         ];
 
         let ctx = AppContext::new(test_releases);
-        let app_names = ctx.get_pkgs();
+        let app_names = ctx.get_latest_pkg_names();
         assert_eq!(app_names.len(), 2);
         assert!(app_names.contains(&"tiger".to_string()));
         assert!(app_names.contains(&"elephant".to_string()));

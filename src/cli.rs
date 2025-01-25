@@ -1,7 +1,7 @@
 use colorize::AnsiColor;
 use inquire::{
     ui::{Color, RenderConfig, Styled},
-    Editor, Select,
+    Confirm, Editor, Select,
 };
 use semver::Version;
 
@@ -14,6 +14,7 @@ const MAJOR: &str = "major";
 const MINOR: &str = "minor";
 const PATCH: &str = "patch";
 const RETAIN: &str = "retain version";
+const USE_LOCAL: &str = "use unreleased local version";
 const PRE: &str = "pre-release";
 const PRE_NEW: &str = "create new pre-release";
 const ALPHA: &str = "alpha";
@@ -39,11 +40,15 @@ pub fn select_version_bump(ctx: &AppContext) -> Result<VersionBump, Box<dyn std:
 
     let existing_version = selected_pkg_release_info.version.clone();
 
-    let options = if existing_version.pre.is_empty() {
+    let mut options = if existing_version.pre.is_empty() {
         vec![MAJOR, MINOR, PATCH, PRE_NEW]
     } else {
         vec![MAJOR, MINOR, PATCH, PRE, PRE_NEW]
     };
+
+    if selected_pkg_release_info.local_only {
+        options.push(USE_LOCAL)
+    }
 
     let ans = Select::new("Select which version bump to apply", options).prompt()?;
     let ans = match ans {
@@ -52,6 +57,7 @@ pub fn select_version_bump(ctx: &AppContext) -> Result<VersionBump, Box<dyn std:
         PATCH => VersionBump::Patch,
         PRE => VersionBump::Pre,
         PRE_NEW => create_pre_release(ctx, existing_version)?,
+        USE_LOCAL => VersionBump::RetainIfUnreleased,
         _ => panic!("Invalid version bump"),
     };
 
@@ -164,6 +170,48 @@ pub fn input_release_description(ctx: &AppContext) -> Result<String, Box<dyn std
         .with_render_config(description_render_config())
         .prompt()?;
     Ok(description)
+}
+
+pub fn input_confirmation(ctx: &AppContext) -> Result<bool, Box<dyn std::error::Error>> {
+    let selected_pkg = ctx.get_selected_package().unwrap().clone();
+    let target_release = ctx.get_target_release_info().unwrap().clone();
+
+    let help_msg = get_confirmation_help_msg(ctx);
+
+    let msg = format!(
+        "Are you sure you want to release {} version {}?",
+        selected_pkg.to_string().cyan(),
+        target_release.version.to_string().green()
+    );
+    let ans = Confirm::new(msg.as_str())
+        .with_default(true)
+        .with_help_message(help_msg.as_str())
+        .prompt()?;
+
+    Ok(ans)
+}
+
+fn get_confirmation_help_msg(ctx: &AppContext) -> String {
+    let target_release = ctx.get_target_release_info().unwrap().clone();
+
+    let mut help_msg = String::new();
+
+    let local_pkg_files = match target_release.local_pkg_files {
+        None => return help_msg,
+        Some(files) => files,
+    };
+
+    local_pkg_files
+        .package_json
+        .and_then(|pkg| pkg.name.and_then(|_| pkg.path))
+        .map(|path| help_msg.push_str(&format!("Will update {}", path)));
+
+    local_pkg_files
+        .package_lock_json
+        .and_then(|pkg| pkg.name.and_then(|_| pkg.path))
+        .map(|path| help_msg.push_str(&format!("\nWill update {}", path)));
+
+    help_msg
 }
 
 fn description_render_config() -> RenderConfig<'static> {

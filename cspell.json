@@ -7,10 +7,12 @@
   "dictionaries": [],
   "words": [
     "crossterm",
+    "greenb",
     "optimus",
     "ratatui",
     "Rema",
-    "serde"
+    "serde",
+    "yellowb"
   ],
   "ignoreWords": [],
   "import": []

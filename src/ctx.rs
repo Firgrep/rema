@@ -42,30 +42,6 @@ impl AppContext {
         }
     }
 
-    pub fn set_selected_package(&mut self, pkg_name: String) {
-        if self.all_gh_versions.contains_key(&pkg_name) {
-            self.selected_pkg = Some(pkg_name);
-        } else {
-            panic!("Package not found: {}", pkg_name);
-        }
-    }
-
-    pub fn set_local_pkg_files(&mut self, local_pkg_files: Vec<LocalPackageFiles>) {
-        self.local_pkg_files = Some(local_pkg_files);
-    }
-
-    pub fn get_local_pkg_files(&self) -> Option<&Vec<LocalPackageFiles>> {
-        self.local_pkg_files.as_ref()
-    }
-
-    pub fn set_selected_bump(&mut self, bump: VersionBump) {
-        self.selected_bump = Some(bump);
-    }
-
-    pub fn set_target_release_info(&mut self, release_info: ReleaseInfo) {
-        self.target_version = Some(release_info);
-    }
-
     pub fn get_gh_generate_release_notes(&self) -> bool {
         self.gh_generate_release_notes
     }
@@ -101,12 +77,52 @@ impl AppContext {
         self.target_version.as_ref()
     }
 
-    pub fn get_pkgs(&self) -> Vec<String> {
-        self.all_gh_versions.keys().cloned().collect()
+    pub fn get_latest_pkg_names(&self) -> Vec<String> {
+        self.latest_gh_versions
+            .iter()
+            .map(|(name, info)| {
+                if info.local_only {
+                    format!("{} (unreleased)", name)
+                } else {
+                    name.clone()
+                }
+            })
+            .collect()
     }
 
     pub fn get_latest_versions(&self) -> &HashMap<String, ReleaseInfo> {
         &self.latest_gh_versions
+    }
+
+    pub fn set_selected_package(&mut self, pkg_name: String) {
+        self.selected_pkg = Some(pkg_name);
+    }
+
+    pub fn set_and_match_local_pkg_files(&mut self, local_pkg_files: Vec<LocalPackageFiles>) {
+        self.local_pkg_files = Some(local_pkg_files.clone());
+
+        match transform::match_local_pkgs_with_gh_pkgs(
+            &mut self.latest_gh_versions,
+            &local_pkg_files,
+        ) {
+            Ok(matched_versions) => {
+                self.latest_gh_versions = matched_versions;
+            }
+            Err(e) => {
+                panic!(
+                    "Failed to match local packages with GitHub packages: {:?}",
+                    e
+                );
+            }
+        }
+    }
+
+    pub fn set_selected_bump(&mut self, bump: VersionBump) {
+        self.selected_bump = Some(bump);
+    }
+
+    pub fn set_target_release_info(&mut self, release_info: ReleaseInfo) {
+        self.target_version = Some(release_info);
     }
 
     pub fn find_existing_prerelease(
