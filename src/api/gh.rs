@@ -1,6 +1,8 @@
-use std::{error::Error, process::Command};
+use std::{error::Error, process::Command, str};
 
 use serde::{Deserialize, Serialize};
+
+use crate::transform::ReleaseInfo;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Release {
@@ -104,4 +106,40 @@ pub fn list_releases() -> Result<Vec<Release>, Box<dyn Error>> {
         .map_err(|e| format!("Failed to parse releases: {}", e))?;
 
     Ok(releases)
+}
+
+pub fn create_release(
+    release_info: ReleaseInfo,
+    target_description: String,
+    target_title: String,
+) -> Result<(), Box<dyn Error>> {
+    let version = release_info.version.to_string();
+    let notes = format!("{:?}", target_description);
+
+    let mut command_args = vec![
+        "release",
+        "create",
+        &version,
+        "--notes",
+        &notes,
+        "--title",
+        &target_title,
+        "--generate-notes",
+    ];
+
+    if !release_info.version.pre.is_empty() {
+        command_args.push("--prerelease");
+    }
+
+    let output = Command::new("gh")
+        .args(&command_args)
+        .output()
+        .expect("Failed to execute gh release create");
+
+    if !output.status.success() {
+        let stderr = str::from_utf8(&output.stderr)?;
+        return Err(format!("Git push failed: {}", stderr).into());
+    }
+
+    Ok(())
 }

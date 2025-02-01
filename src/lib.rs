@@ -12,8 +12,8 @@ mod write;
 // TODO - write and release phase
 // ? DONE keep backups of the original files to revert if the process below fails
 // ? DONE write new version to local package.json if they exist
-// commit and push changes, create the new release
-// git pull to sync with remote (get tags)
+// ? DONE commit and push changes, create the new release
+// ? DONE git fetch to sync with remote (get tags)
 // error handle and restore original files if above fails
 // TODO - command line arguments
 // TODO - allow selection of which pre to bump if multiple
@@ -96,10 +96,29 @@ impl Rema {
             selected_pkg, selected_pkg_release_info.version, target_release_info.version
         );
 
-        println!("has v prefix: {}", target_release_info.has_v_prefix);
-        println!("title: {}", target_title);
-        println!("target_description: {}", target_description);
-        println!("local_pkgs: {:#?}", target_release_info.local_pkg_files);
+        // TODO create transaction to restore backups if the below fail
+        let local_pkg_backups = write::write_target_release_to_local_files(&ctx)
+            .unwrap_or_else(|e| panic!("Failed to write to local package files {:?}", Some(e)));
+
+        git::create_release_commit(&target_release_info.version)
+            .unwrap_or_else(|e| panic!("Failed to make git commit {:?}", Some(e)));
+
+        git::push().unwrap();
+
+        gh::create_release(target_release_info, target_description, target_title)
+            .unwrap_or_else(|e| panic!("Failed to create release {:?}", Some(e)));
+
+        git::fetch_tags().unwrap()
+
+        match execute_release_transaction(&ctx, target_release_info, target_description, target_title) {
+            Ok(()) => println!("Release completed successfully"),
+            Err(e) => eprintln!("Release failed and was rolled back: {}", e),
+        }
+
+        // println!("has v prefix: {}", target_release_info.has_v_prefix);
+        // println!("title: {}", target_title);
+        // println!("target_description: {}", target_description);
+        // println!("local_pkgs: {:#?}", target_release_info.local_pkg_files);
     }
 
     fn requirements_check() {
@@ -123,5 +142,53 @@ impl Rema {
         // git::verify_no_outstanding_commits().unwrap_or_else(|e| {
         //     panic!("{:?}", Some(e).unwrap());
         // });
+    }
+
+    fn execute_release_transaction(
+        ctx: &Context,
+        target_release_info: ReleaseInfo,
+        target_description: String,
+        target_title: String,
+    ) -> Result<(), Box<dyn Error>> {
+        // Step 1: Create backups first
+        let local_pkg_backups = match write::write_target_release_to_local_files(ctx) {
+            Ok(backups) => backups,
+            Err(e) => return Err(format!("Failed to write to local package files: {:?}", e).into()),
+        };
+
+        // Create a cleanup function that will run on error
+        let restore_backups = || {
+            for (path, content) in &local_pkg_backups {
+                if let Err(e) = std::fs::write(path, content) {
+                    eprintln!(
+                        "Warning: Failed to restore backup for {}: {:?}",
+                        path.display(),
+                        e
+                    );
+                }
+            }
+        };
+
+        // Step 2: Execute each operation in sequence, rolling back on failure
+        let result: Result<(), Box<dyn Error>> = (|| {
+            git::create_release_commit(&target_release_info.version)
+                .map_err(|e| format!("Failed to make git commit: {:?}", e))?;
+
+            git::push().map_err(|e| format!("Failed to push changes: {:?}", e))?;
+
+            gh::create_release(target_release_info, target_description, target_title)
+                .map_err(|e| format!("Failed to create release: {:?}", e))?;
+
+            git::fetch_tags().map_err(|e| format!("Failed to fetch tags: {:?}", e))?;
+
+            Ok(())
+        })();
+
+        // If any step failed, restore from backups
+        if result.is_err() {
+            restore_backups();
+        }
+
+        result
     }
 }

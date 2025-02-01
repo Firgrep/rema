@@ -1,4 +1,6 @@
-use std::{error::Error, process::Command};
+use std::{error::Error, process::Command, str};
+
+use semver::Version;
 
 const GIT_MIN_VERSION: &str = "2.43.0";
 const GIT_MAX_VERSION: &str = "3.0.0";
@@ -57,4 +59,49 @@ pub fn verify_no_outstanding_commits() -> Result<(), Box<dyn Error>> {
     } else {
         Ok(())
     }
+}
+
+pub fn create_release_commit(version: &Version) -> Result<(), Box<dyn Error>> {
+    let output = Command::new("git")
+        .arg("commit")
+        .arg("-m")
+        .arg(version.to_string())
+        .output()
+        .expect("Failed to execute git commit");
+
+    if !output.status.success() {
+        let stderr = str::from_utf8(&output.stderr)?;
+        return Err(format!("Git commit failed: {}", stderr).into());
+    }
+
+    Ok(())
+}
+
+pub fn push() -> Result<(), Box<dyn Error>> {
+    let output = Command::new("git")
+        .arg("push")
+        .output()
+        .expect("Failed to execute git push");
+
+    if !output.status.success() {
+        let stderr = str::from_utf8(&output.stderr)?;
+        return Err(format!("Git push failed: {}", stderr).into());
+    }
+
+    Ok(())
+}
+
+pub fn fetch_tags() -> Result<(), Box<dyn Error>> {
+    let output = Command::new("git")
+        .arg("fetch")
+        .arg("--tags")
+        .output()
+        .expect("Failed to execute git fetch");
+
+    if !output.status.success() {
+        let stderr = str::from_utf8(&output.stderr)?;
+        return Err(format!("Git fetch failed: {}", stderr).into());
+    }
+
+    Ok(())
 }

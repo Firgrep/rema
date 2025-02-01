@@ -7,11 +7,16 @@ use serde_json::Value;
 
 use crate::ctx::AppContext;
 
+pub struct OriginalFile {
+    contents: String,
+    path: String,
+}
+
 pub enum WriteTargetResult {
     NoWrites,
     WritesCompleted {
-        original_pkg_json: Option<String>,
-        original_pkg_json_lock: Option<String>,
+        original_pkg_json: Option<OriginalFile>,
+        original_pkg_json_lock: Option<OriginalFile>,
     },
 }
 
@@ -32,6 +37,7 @@ pub fn write_target_release_to_local_files(
     let mut original_pkg_json_lock_contents = String::new();
 
     let mut original_pkg_json_path = "";
+    let mut original_pkg_json_lock_path = "";
 
     if let Some(path) = local_pkg_files
         .package_json
@@ -64,6 +70,7 @@ pub fn write_target_release_to_local_files(
         .and_then(|pkg| pkg.path.as_ref())
     {
         let path_str = path.as_str();
+        original_pkg_json_lock_path = path_str;
         let original_contents = fs::read_to_string(path_str)?;
 
         let mut json: Value = serde_json::from_str(&original_contents)?;
@@ -90,12 +97,18 @@ pub fn write_target_release_to_local_files(
         original_pkg_json: if original_pkg_json_contents.is_empty() {
             None
         } else {
-            Some(original_pkg_json_contents)
+            Some(OriginalFile {
+                contents: original_pkg_json_contents,
+                path: original_pkg_json_path.to_string(),
+            })
         },
         original_pkg_json_lock: if original_pkg_json_lock_contents.is_empty() {
             None
         } else {
-            Some(original_pkg_json_lock_contents)
+            Some(OriginalFile {
+                contents: original_pkg_json_lock_contents,
+                path: original_pkg_json_lock_path.to_string(),
+            })
         },
     })
 }
