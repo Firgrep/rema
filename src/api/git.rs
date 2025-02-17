@@ -5,6 +5,12 @@ use semver::Version;
 const GIT_MIN_VERSION: &str = "2.43.0";
 const GIT_MAX_VERSION: &str = "3.0.0";
 
+#[derive(Debug)]
+pub struct CommitInfo {
+    pub sha: String,
+    pub message: String,
+}
+
 pub fn verify_git_version() -> Result<bool, Box<dyn Error>> {
     let output = Command::new("git")
         .arg("--version")
@@ -64,7 +70,7 @@ pub fn verify_no_outstanding_commits() -> Result<(), Box<dyn Error>> {
 /// Create a release commit with the target version as message.
 ///
 /// Will handle and verify staging.
-pub fn create_release_commit(version: &Version) -> Result<(), Box<dyn Error>> {
+pub fn create_release_commit(target_title: &String) -> Result<CommitInfo, Box<dyn Error>> {
     // Stage all changes using -A flag
     let stage_result = Command::new("git")
         .args(["add", "-A"])
@@ -94,7 +100,7 @@ pub fn create_release_commit(version: &Version) -> Result<(), Box<dyn Error>> {
     let commit_result = Command::new("git")
         .arg("commit")
         .arg("-m")
-        .arg(format!("Release version {}", version))
+        .arg(format!("{}", target_title))
         .output()
         .map_err(|e| format!("Failed to execute git commit: {}", e))?;
 
@@ -118,10 +124,28 @@ pub fn create_release_commit(version: &Version) -> Result<(), Box<dyn Error>> {
         return Err(error_msg.into());
     }
 
-    Ok(())
+    // Get the commit SHA to deal with later if we need to restore initial state
+    let sha_result = Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .map_err(|e| format!("Failed to get commit SHA: {}", e))?;
+
+    if !sha_result.status.success() {
+        return Err("Failed to get commit SHA".into());
+    }
+
+    let sha = str::from_utf8(&sha_result.stdout)
+        .map_err(|e| format!("Failed to parse commit SHA: {}", e))?
+        .trim()
+        .to_string();
+
+    Ok(CommitInfo {
+        sha,
+        message: target_title.clone(),
+    })
 }
 
-pub fn push() -> Result<(), Box<dyn Error>> {
+pub fn push() -> Result<bool, Box<dyn Error>> {
     let output = Command::new("git")
         .arg("push")
         .output()
@@ -132,7 +156,7 @@ pub fn push() -> Result<(), Box<dyn Error>> {
         return Err(format!("Git push failed: {}", stderr).into());
     }
 
-    Ok(())
+    Ok(true)
 }
 
 pub fn fetch_tags() -> Result<(), Box<dyn Error>> {
@@ -145,6 +169,36 @@ pub fn fetch_tags() -> Result<(), Box<dyn Error>> {
     if !output.status.success() {
         let stderr = str::from_utf8(&output.stderr)?;
         return Err(format!("Git fetch failed: {}", stderr).into());
+    }
+
+    Ok(())
+}
+
+pub fn revert_local_commit(commit_info: CommitInfo) -> Result<(), Box<dyn Error>> {
+    let reset_result = Command::new("git")
+        .args(["reset", "--hard", &format!("{}^", commit_info.sha)])
+        .output()
+        .map_err(|e| format!("Failed to revert commit: {}", e))?;
+
+    if !reset_result.status.success() {
+        let stderr = str::from_utf8(&reset_result.stderr)
+            .map_err(|e| format!("Failed to parse git reset error: {}", e))?;
+        return Err(format!("Failed to revert commit: {}", stderr).into());
+    }
+
+    Ok(())
+}
+
+pub fn revert_remote_commit(commit_info: &CommitInfo) -> Result<(), Box<dyn Error>> {
+    let remote_revert = Command::new("git")
+        .args(["push", "origin", "--delete", &commit_info.sha])
+        .output()
+        .map_err(|e| format!("Failed to remove remote commit: {}", e))?;
+
+    if !remote_revert.status.success() {
+        let stderr = str::from_utf8(&remote_revert.stderr)
+            .map_err(|e| format!("Warning: Failed to remove remote commit: {}", e))?;
+        return Err(format!("Failed to revert commit: {}", stderr).into());
     }
 
     Ok(())

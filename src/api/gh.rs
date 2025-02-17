@@ -119,8 +119,6 @@ pub fn create_release(
         "release",
         "create",
         &target_title,
-        "--notes",
-        &notes,
         "--title",
         &target_title,
         "--generate-notes",

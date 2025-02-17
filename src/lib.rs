@@ -1,6 +1,9 @@
 use std::error::Error;
 
-use api::{gh, git};
+use api::{
+    gh,
+    git::{self, CommitInfo},
+};
 use colorize::AnsiColor;
 use ctx::AppContext;
 use transform::ReleaseInfo;
@@ -149,45 +152,19 @@ impl Rema {
             Ok(backups) => backups,
             Err(e) => return Err(format!("Failed to write to local package files: {:?}", e).into()),
         };
-
-        // Create a cleanup function that will run on error
-        let restore_backups = |result: &WriteTargetResult| {
-            if let WriteTargetResult::WritesCompleted {
-                original_pkg_json,
-                original_pkg_json_lock,
-            } = result
-            {
-                // Restore package.json if it exists
-                if let Some(original) = original_pkg_json {
-                    if let Err(e) = std::fs::write(&original.path, &original.contents) {
-                        eprintln!(
-                            "Warning: Failed to restore backup for {}: {:?}",
-                            original.path.as_str(),
-                            e
-                        );
-                    }
-                }
-
-                // Restore package-lock.json if it exists
-                if let Some(original) = original_pkg_json_lock {
-                    if let Err(e) = std::fs::write(&original.path, &original.contents) {
-                        eprintln!(
-                            "Warning: Failed to restore backup for {}: {:?}",
-                            original.path.as_str(),
-                            e
-                        );
-                    }
-                }
-            }
-            // No action needed for NoWrites variant
-        };
+        let mut commit_info: Option<CommitInfo> = None;
+        let mut was_pushed = false;
 
         // Step 2: Execute each operation in sequence, rolling back on failure
         let result: Result<(), Box<dyn Error>> = (|| {
-            git::create_release_commit(&target_release_info.version)
-                .map_err(|e| format!("Failed to make git commit: {:?}", e))?;
+            commit_info = Some(
+                git::create_release_commit(&target_title)
+                    .map_err(|e| format!("Failed to make git commit: {:?}", e))?,
+            );
 
-            git::push().map_err(|e| format!("Failed to push changes: {:?}", e))?;
+            was_pushed = git::push().map_err(|e| format!("Failed to push changes: {:?}", e))?;
+
+            return Err("Test error message".into());
 
             gh::create_release(&target_release_info, target_description, target_title)
                 .map_err(|e| format!("Failed to create release: {:?}", e))?;
@@ -199,9 +176,61 @@ impl Rema {
 
         // If any step failed, restore from backups
         if result.is_err() {
-            restore_backups(&local_pkg_backups);
+            Self::restore_backups(&local_pkg_backups, commit_info, was_pushed)
+                .map_err(|e| format!("Failed to restore. Check your git history remote and locally to restore manually: {:?}", e))?;
         }
 
         result
+    }
+
+    // Create a cleanup function that will run on error
+    fn restore_backups(
+        result: &WriteTargetResult,
+        commit_info: Option<CommitInfo>,
+        was_pushed: bool,
+    ) -> Result<(), Box<dyn Error>> {
+        if let Some(commit) = commit_info {
+            // If it was pushed to remote, we need to handle that first
+            if was_pushed {
+                // First try to delete the remote branch/tag if it exists
+                git::revert_remote_commit(&commit)
+                    .map_err(|e| format!("Failed to revert remote commit: {:?}", e))?;
+            }
+
+            // Now handle local reversion
+            git::revert_local_commit(commit)
+                .map_err(|e| format!("Failed to revert local commit: {:?}", e))?;
+
+            return Ok(());
+        }
+
+        if let WriteTargetResult::WritesCompleted {
+            original_pkg_json,
+            original_pkg_json_lock,
+        } = result
+        {
+            // Restore package.json if it exists
+            if let Some(original) = original_pkg_json {
+                if let Err(e) = std::fs::write(&original.path, &original.contents) {
+                    eprintln!(
+                        "Warning: Failed to restore backup for {}: {:?}",
+                        original.path.as_str(),
+                        e
+                    );
+                }
+            }
+
+            // Restore package-lock.json if it exists
+            if let Some(original) = original_pkg_json_lock {
+                if let Err(e) = std::fs::write(&original.path, &original.contents) {
+                    eprintln!(
+                        "Warning: Failed to restore backup for {}: {:?}",
+                        original.path.as_str(),
+                        e
+                    );
+                }
+            }
+        }
+        Ok(()) // No action needed for NoWrites variant
     }
 }
