@@ -1,12 +1,13 @@
 {
-    "name": "optimus-prime",
-    "module": "index.ts",
-    "type": "module",
-    "peerDependencies": {
-        "typescript": "^5.0.0"
-    },
-    "dependencies": {
-        "axios": "^1.7.9",
-        "commander": "^12.1.0"
-    }
+  "dependencies": {
+    "axios": "^1.7.9",
+    "commander": "^12.1.0"
+  },
+  "module": "index.ts",
+  "name": "optimus-prime",
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "type": "module",
+  "version": "0.0.2-alpha.2"
 }
