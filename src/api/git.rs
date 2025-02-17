@@ -175,29 +175,14 @@ pub fn fetch_tags() -> Result<(), Box<dyn Error>> {
 }
 
 pub fn revert_local_commit(commit_info: CommitInfo) -> Result<(), Box<dyn Error>> {
-    let reset_result = Command::new("git")
-        .args(["reset", "--hard", &format!("{}^", commit_info.sha)])
-        .output()
-        .map_err(|e| format!("Failed to revert commit: {}", e))?;
-
-    if !reset_result.status.success() {
-        let stderr = str::from_utf8(&reset_result.stderr)
-            .map_err(|e| format!("Failed to parse git reset error: {}", e))?;
-        return Err(format!("Failed to revert commit: {}", stderr).into());
-    }
-
-    Ok(())
-}
-
-pub fn revert_remote_commit(commit_info: &CommitInfo) -> Result<(), Box<dyn Error>> {
-    let remote_revert = Command::new("git")
-        .args(["push", "origin", "--delete", &commit_info.sha])
+    let revert = Command::new("git")
+        .args(["revert", "--no-edit", &commit_info.sha])
         .output()
         .map_err(|e| format!("Failed to remove remote commit: {}", e))?;
 
-    if !remote_revert.status.success() {
-        let stderr = str::from_utf8(&remote_revert.stderr)
-            .map_err(|e| format!("Warning: Failed to remove remote commit: {}", e))?;
+    if !revert.status.success() {
+        let stderr = str::from_utf8(&revert.stderr)
+            .map_err(|e| format!("Failed to parse git reset error: {}", e))?;
         return Err(format!("Failed to revert commit: {}", stderr).into());
     }
 

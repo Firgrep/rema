@@ -190,16 +190,12 @@ impl Rema {
         was_pushed: bool,
     ) -> Result<(), Box<dyn Error>> {
         if let Some(commit) = commit_info {
-            // If it was pushed to remote, we need to handle that first
-            if was_pushed {
-                // First try to delete the remote branch/tag if it exists
-                git::revert_remote_commit(&commit)
-                    .map_err(|e| format!("Failed to revert remote commit: {:?}", e))?;
-            }
-
-            // Now handle local reversion
             git::revert_local_commit(commit)
                 .map_err(|e| format!("Failed to revert local commit: {:?}", e))?;
+            if was_pushed {
+                git::push()
+                    .map_err(|e| format!("Failed to push after reverting local commit: {:?}", e))?;
+            }
 
             return Ok(());
         }
