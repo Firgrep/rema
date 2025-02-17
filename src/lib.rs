@@ -141,6 +141,10 @@ impl Rema {
         // });
     }
 
+    /// Release procedure. If any step fails, will attempt to restore to original state and
+    /// in the case of commits and pushes reverts will be employed.
+    ///
+    /// Manual test with `return Err("Test error message".into());`
     fn execute_release_transaction(
         ctx: &AppContext,
         target_release_info: &ReleaseInfo,
@@ -163,8 +167,6 @@ impl Rema {
             );
 
             was_pushed = git::push().map_err(|e| format!("Failed to push changes: {:?}", e))?;
-
-            return Err("Test error message".into());
 
             gh::create_release(&target_release_info, target_description, target_title)
                 .map_err(|e| format!("Failed to create release: {:?}", e))?;
