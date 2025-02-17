@@ -96,18 +96,16 @@ impl Rema {
             return;
         }
 
-        println!(
-            "Bumped version for {} from {} to {}",
-            selected_pkg, selected_pkg_release_info.version, target_release_info.version
-        );
-
         match Self::execute_release_transaction(
             &ctx,
-            target_release_info,
+            &target_release_info,
             target_description,
             target_title,
         ) {
-            Ok(()) => println!("Release completed successfully"),
+            Ok(()) => println!(
+                "Release completed successfully! Bumped version for {} from {} to {}",
+                selected_pkg, selected_pkg_release_info.version, target_release_info.version
+            ),
             Err(e) => eprintln!("Release failed and was rolled back: {}", e),
         }
 
@@ -142,7 +140,7 @@ impl Rema {
 
     fn execute_release_transaction(
         ctx: &AppContext,
-        target_release_info: ReleaseInfo,
+        target_release_info: &ReleaseInfo,
         target_description: String,
         target_title: String,
     ) -> Result<(), Box<dyn Error>> {
@@ -191,7 +189,7 @@ impl Rema {
 
             git::push().map_err(|e| format!("Failed to push changes: {:?}", e))?;
 
-            gh::create_release(target_release_info, target_description, target_title)
+            gh::create_release(&target_release_info, target_description, target_title)
                 .map_err(|e| format!("Failed to create release: {:?}", e))?;
 
             git::fetch_tags().map_err(|e| format!("Failed to fetch tags: {:?}", e))?;

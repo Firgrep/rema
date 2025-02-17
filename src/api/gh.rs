@@ -109,17 +109,16 @@ pub fn list_releases() -> Result<Vec<Release>, Box<dyn Error>> {
 }
 
 pub fn create_release(
-    release_info: ReleaseInfo,
+    release_info: &ReleaseInfo,
     target_description: String,
     target_title: String,
 ) -> Result<(), Box<dyn Error>> {
-    let version = release_info.version.to_string();
     let notes = format!("{:?}", target_description);
 
     let mut command_args = vec![
         "release",
         "create",
-        &version,
+        &target_title,
         "--notes",
         &notes,
         "--title",
@@ -128,11 +127,16 @@ pub fn create_release(
         "--verify-tag",
     ];
 
-    println!("{:?}", command_args);
-    panic!();
+    if !notes.is_empty() {
+        command_args.push("--notes");
+        command_args.push(&notes);
+    }
+
     if !release_info.version.pre.is_empty() {
         command_args.push("--prerelease");
     }
+
+    println!("DEBUG: {:?}", command_args);
 
     let output = Command::new("gh")
         .args(&command_args)
