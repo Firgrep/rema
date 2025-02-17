@@ -124,7 +124,6 @@ pub fn create_release(
         "--title",
         &target_title,
         "--generate-notes",
-        "--verify-tag",
     ];
 
     if !notes.is_empty() {
