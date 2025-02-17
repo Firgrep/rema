@@ -125,8 +125,11 @@ pub fn create_release(
         "--title",
         &target_title,
         "--generate-notes",
+        "--verify-tag",
     ];
 
+    println!("{:?}", command_args);
+    panic!();
     if !release_info.version.pre.is_empty() {
         command_args.push("--prerelease");
     }
