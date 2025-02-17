@@ -1,5 +1,10 @@
+use std::error::Error;
+
 use api::{gh, git};
 use colorize::AnsiColor;
+use ctx::AppContext;
+use transform::ReleaseInfo;
+use write::WriteTargetResult;
 
 mod api;
 mod cli;
@@ -96,21 +101,12 @@ impl Rema {
             selected_pkg, selected_pkg_release_info.version, target_release_info.version
         );
 
-        // TODO create transaction to restore backups if the below fail
-        let local_pkg_backups = write::write_target_release_to_local_files(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to write to local package files {:?}", Some(e)));
-
-        git::create_release_commit(&target_release_info.version)
-            .unwrap_or_else(|e| panic!("Failed to make git commit {:?}", Some(e)));
-
-        git::push().unwrap();
-
-        gh::create_release(target_release_info, target_description, target_title)
-            .unwrap_or_else(|e| panic!("Failed to create release {:?}", Some(e)));
-
-        git::fetch_tags().unwrap()
-
-        match execute_release_transaction(&ctx, target_release_info, target_description, target_title) {
+        match Self::execute_release_transaction(
+            &ctx,
+            target_release_info,
+            target_description,
+            target_title,
+        ) {
             Ok(()) => println!("Release completed successfully"),
             Err(e) => eprintln!("Release failed and was rolled back: {}", e),
         }
@@ -145,7 +141,7 @@ impl Rema {
     }
 
     fn execute_release_transaction(
-        ctx: &Context,
+        ctx: &AppContext,
         target_release_info: ReleaseInfo,
         target_description: String,
         target_title: String,
@@ -157,16 +153,35 @@ impl Rema {
         };
 
         // Create a cleanup function that will run on error
-        let restore_backups = || {
-            for (path, content) in &local_pkg_backups {
-                if let Err(e) = std::fs::write(path, content) {
-                    eprintln!(
-                        "Warning: Failed to restore backup for {}: {:?}",
-                        path.display(),
-                        e
-                    );
+        let restore_backups = |result: &WriteTargetResult| {
+            if let WriteTargetResult::WritesCompleted {
+                original_pkg_json,
+                original_pkg_json_lock,
+            } = result
+            {
+                // Restore package.json if it exists
+                if let Some(original) = original_pkg_json {
+                    if let Err(e) = std::fs::write(&original.path, &original.contents) {
+                        eprintln!(
+                            "Warning: Failed to restore backup for {}: {:?}",
+                            original.path.as_str(),
+                            e
+                        );
+                    }
+                }
+
+                // Restore package-lock.json if it exists
+                if let Some(original) = original_pkg_json_lock {
+                    if let Err(e) = std::fs::write(&original.path, &original.contents) {
+                        eprintln!(
+                            "Warning: Failed to restore backup for {}: {:?}",
+                            original.path.as_str(),
+                            e
+                        );
+                    }
                 }
             }
+            // No action needed for NoWrites variant
         };
 
         // Step 2: Execute each operation in sequence, rolling back on failure
@@ -186,7 +201,7 @@ impl Rema {
 
         // If any step failed, restore from backups
         if result.is_err() {
-            restore_backups();
+            restore_backups(&local_pkg_backups);
         }
 
         result

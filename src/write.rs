@@ -8,8 +8,8 @@ use serde_json::Value;
 use crate::ctx::AppContext;
 
 pub struct OriginalFile {
-    contents: String,
-    path: String,
+    pub contents: String,
+    pub path: String,
 }
 
 pub enum WriteTargetResult {

@@ -61,17 +61,61 @@ pub fn verify_no_outstanding_commits() -> Result<(), Box<dyn Error>> {
     }
 }
 
+/// Create a release commit with the target version as message.
+///
+/// Will handle and verify staging.
 pub fn create_release_commit(version: &Version) -> Result<(), Box<dyn Error>> {
-    let output = Command::new("git")
+    // Stage all changes using -A flag
+    let stage_result = Command::new("git")
+        .args(["add", "-A"])
+        .output()
+        .map_err(|e| format!("Failed to stage changes: {}", e))?;
+
+    if !stage_result.status.success() {
+        let stderr = str::from_utf8(&stage_result.stderr)
+            .map_err(|e| format!("Failed to parse git staging error: {}", e))?;
+        return Err(format!("Failed to stage changes: {}", stderr).into());
+    }
+
+    // Verify changes were staged
+    let status = Command::new("git")
+        .args(["status", "--porcelain"])
+        .output()
+        .map_err(|e| format!("Failed to check git status: {}", e))?;
+
+    let status_str = str::from_utf8(&status.stdout)
+        .map_err(|e| format!("Failed to parse git status output: {}", e))?;
+
+    if status_str.trim().is_empty() {
+        return Err("No changes staged for commit".into());
+    }
+
+    // Run commit
+    let commit_result = Command::new("git")
         .arg("commit")
         .arg("-m")
-        .arg(version.to_string())
+        .arg(format!("Release version {}", version))
         .output()
-        .expect("Failed to execute git commit");
+        .map_err(|e| format!("Failed to execute git commit: {}", e))?;
 
-    if !output.status.success() {
-        let stderr = str::from_utf8(&output.stderr)?;
-        return Err(format!("Git commit failed: {}", stderr).into());
+    if !commit_result.status.success() {
+        let stderr = str::from_utf8(&commit_result.stderr)
+            .map_err(|e| format!("Failed to parse git error output: {}", e))?;
+        let stdout = str::from_utf8(&commit_result.stdout)
+            .map_err(|e| format!("Failed to parse git output: {}", e))?;
+
+        // Combining stdout and stderr for more complete error information
+        let error_msg = if stderr.trim().is_empty() {
+            if stdout.trim().is_empty() {
+                "Git commit failed with no error message".to_string()
+            } else {
+                format!("Git commit failed: {}", stdout.trim())
+            }
+        } else {
+            format!("Git commit failed: {}", stderr.trim())
+        };
+
+        return Err(error_msg.into());
     }
 
     Ok(())
