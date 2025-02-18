@@ -135,10 +135,9 @@ impl Rema {
             panic!("Git is not installed");
         }
 
-        // TODO
-        // git::verify_no_outstanding_commits().unwrap_or_else(|e| {
-        //     panic!("{:?}", Some(e).unwrap());
-        // });
+        git::verify_no_outstanding_commits().unwrap_or_else(|e| {
+            panic!("{:?}", Some(e).unwrap());
+        });
     }
 
     /// Release procedure. If any step fails, will attempt to restore to original state and

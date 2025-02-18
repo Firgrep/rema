@@ -1,14 +1,12 @@
 use std::{error::Error, process::Command, str};
 
-use semver::Version;
-
 const GIT_MIN_VERSION: &str = "2.43.0";
 const GIT_MAX_VERSION: &str = "3.0.0";
 
 #[derive(Debug)]
 pub struct CommitInfo {
     pub sha: String,
-    pub message: String,
+    pub _message: String,
 }
 
 pub fn verify_git_version() -> Result<bool, Box<dyn Error>> {
@@ -141,7 +139,7 @@ pub fn create_release_commit(target_title: &String) -> Result<CommitInfo, Box<dy
 
     Ok(CommitInfo {
         sha,
-        message: target_title.clone(),
+        _message: target_title.clone(),
     })
 }
 
