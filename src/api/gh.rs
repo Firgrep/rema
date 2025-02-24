@@ -113,8 +113,6 @@ pub fn create_release(
     target_description: String,
     target_title: String,
 ) -> Result<(), Box<dyn Error>> {
-    let notes = format!("{:?}", target_description);
-
     let mut command_args = vec![
         "release",
         "create",
@@ -124,9 +122,9 @@ pub fn create_release(
         "--generate-notes",
     ];
 
-    if !notes.is_empty() {
+    if !target_description.is_empty() {
         command_args.push("--notes");
-        command_args.push(&notes);
+        command_args.push(&target_description);
     }
 
     if !release_info.version.pre.is_empty() {
