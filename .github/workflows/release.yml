@@ -70,15 +70,15 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           mkdir -p dist
-          cp target/${{ matrix.target }}/release/<your-cli-name> dist/
-          tar -czvf <your-cli-name>-${{ steps.version.outputs.value }}-${{ matrix.target }}.tar.gz -C dist <your-cli-name>
+          cp target/${{ matrix.target }}/release/rema dist/
+          tar -czvf rema-${{ steps.version.outputs.value }}-${{ matrix.target }}.tar.gz -C dist rema
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
         run: |
           mkdir dist
-          copy target\${{ matrix.target }}\release\<your-cli-name>.exe dist\
-          7z a <your-cli-name>-${{ steps.version.outputs.value }}-${{ matrix.target }}.zip .\dist\<your-cli-name>.exe
+          copy target\${{ matrix.target }}\release\rema.exe dist\
+          7z a rema-${{ steps.version.outputs.value }}-${{ matrix.target }}.zip .\dist\rema.exe
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
