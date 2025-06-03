@@ -1,0 +1,101 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_INCREMENTAL: 0
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and Package - ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: version
+        uses: SebRollen/toml-action@v1.2.0
+        with:
+          file: Cargo.toml
+          field: package.version
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+          target: ${{ matrix.target }}
+
+      - name: Set up Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install `cross` (Linux only)
+        if: runner.os == 'Linux'
+        uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: --git=https://github.com/cross-rs/cross.git --locked --rev=02bf930e0cb0c6f1beffece0788f3932ecb2c7eb cross
+
+      - name: Build CLI
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --locked --target=${{ matrix.target }}
+          use-cross: ${{ runner.os == 'Linux' }}
+
+      - name: Package (*nix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/<your-cli-name> dist/
+          tar -czvf <your-cli-name>-${{ steps.version.outputs.value }}-${{ matrix.target }}.tar.gz -C dist <your-cli-name>
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          mkdir dist
+          copy target\${{ matrix.target }}\release\<your-cli-name>.exe dist\
+          7z a <your-cli-name>-${{ steps.version.outputs.value }}-${{ matrix.target }}.zip .\dist\<your-cli-name>.exe
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: |
+            *.tar.gz
+            *.zip
+
+      - name: Create GitHub release (draft)
+        if: |
+          github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'chore(release)')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: v${{ steps.version.outputs.value }}
+          tag_name: v${{ steps.version.outputs.value }}
+          files: |
+            *.tar.gz
+            *.zip
