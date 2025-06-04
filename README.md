@@ -1,3 +1,3 @@
-# **Re**lease **Ma**nager
+# Release Manager
 
-Very early alpha. 
+Work in progress. Very early alpha. 
