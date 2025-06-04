@@ -88,6 +88,15 @@ jobs:
             *.tar.gz
             *.zip
 
+      - name: Create and push git tag
+        if: |
+          github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'chore(release)')
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git tag v${{ steps.get_version.outputs.value }}
+          git push origin v${{ steps.get_version.outputs.value }}
+
       - name: Create GitHub release (draft)
         if: |
           github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'chore(release)')
